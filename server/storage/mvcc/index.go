@@ -49,6 +49,9 @@ func newTreeIndex(lg *zap.Logger) index {
 	}
 }
 
+/***
+treeIndex更新key对应的revision信息
+*/
 func (ti *treeIndex) Put(key []byte, rev revision) {
 	keyi := &keyIndex{key: key}
 
@@ -64,6 +67,9 @@ func (ti *treeIndex) Put(key []byte, rev revision) {
 	okeyi.put(ti.lg, rev.main, rev.sub)
 }
 
+/***
+从treeIndex中获取key对应的revision信息
+*/
 func (ti *treeIndex) Get(key []byte, atRev int64) (modified, created revision, ver int64, err error) {
 	ti.RLock()
 	defer ti.RUnlock()
@@ -78,6 +84,9 @@ func (ti *treeIndex) unsafeGet(key []byte, atRev int64) (modified, created revis
 	return keyi.get(ti.lg, atRev)
 }
 
+/***
+判断keyi是否存在于treeIndex中
+*/
 func (ti *treeIndex) KeyIndex(keyi *keyIndex) *keyIndex {
 	ti.RLock()
 	defer ti.RUnlock()
@@ -91,6 +100,9 @@ func (ti *treeIndex) keyIndex(keyi *keyIndex) *keyIndex {
 	return nil
 }
 
+/***
+给定key的范围，升序遍历treeIndex，f函数返回false的时候结束遍历
+*/
 func (ti *treeIndex) unsafeVisit(key, end []byte, f func(ki *keyIndex) bool) {
 	keyi, endi := &keyIndex{key: key}, &keyIndex{key: end}
 
@@ -108,6 +120,10 @@ func (ti *treeIndex) unsafeVisit(key, end []byte, f func(ki *keyIndex) bool) {
 // Revisions returns limited number of revisions from key(included) to end(excluded)
 // at the given rev. The returned slice is sorted in the order of key. There is no limit if limit <= 0.
 // The second return parameter isn't capped by the limit and reflects the total number of revisions.
+/***获取给定范围key的revision信息，limit限制返回revision数组的长度，为0表示不限制
+1. 如果end为空，那么直接返回key对应的revision信息
+2. 如果end不为空，将符合条件的revision添加至返回结果
+*/
 func (ti *treeIndex) Revisions(key, end []byte, atRev int64, limit int) (revs []revision, total int) {
 	ti.RLock()
 	defer ti.RUnlock()
@@ -133,6 +149,9 @@ func (ti *treeIndex) Revisions(key, end []byte, atRev int64, limit int) (revs []
 
 // CountRevisions returns the number of revisions
 // from key(included) to end(excluded) at the given rev.
+/***获取给定范围key的符合条件的revision数量
+是上一个方法的删减
+*/
 func (ti *treeIndex) CountRevisions(key, end []byte, atRev int64) int {
 	ti.RLock()
 	defer ti.RUnlock()
@@ -154,6 +173,10 @@ func (ti *treeIndex) CountRevisions(key, end []byte, atRev int64) int {
 	return total
 }
 
+/***
+1. 如果end为nil，直接获取treeIndex中key对应的revision
+2. 如果不为nil，将获取key和end区间的存在的key，及其对应的revision
+*/
 func (ti *treeIndex) Range(key, end []byte, atRev int64) (keys [][]byte, revs []revision) {
 	ti.RLock()
 	defer ti.RUnlock()
@@ -175,6 +198,9 @@ func (ti *treeIndex) Range(key, end []byte, atRev int64) (keys [][]byte, revs []
 	return keys, revs
 }
 
+/***
+将treeIndex中key标记为删除
+*/
 func (ti *treeIndex) Tombstone(key []byte, rev revision) error {
 	keyi := &keyIndex{key: key}
 
@@ -189,6 +215,10 @@ func (ti *treeIndex) Tombstone(key []byte, rev revision) error {
 	return ki.tombstone(ti.lg, rev.main, rev.sub)
 }
 
+/***
+对treeIndex上所有的keyIndex根据rev都执行compat操作
+会将进行compat操作后的第一个revision进行返回
+*/
 func (ti *treeIndex) Compact(rev int64) map[revision]struct{} {
 	available := make(map[revision]struct{})
 	ti.lg.Info("compact tree index", zap.Int64("revision", rev))
@@ -215,6 +245,9 @@ func (ti *treeIndex) Compact(rev int64) map[revision]struct{} {
 }
 
 // Keep finds all revisions to be kept for a Compaction at the given rev.
+/***
+获取进行compat操作后将要得到的结果，也就是不进行compat操作的删除，只收集revision
+*/
 func (ti *treeIndex) Keep(rev int64) map[revision]struct{} {
 	available := make(map[revision]struct{})
 	ti.RLock()
