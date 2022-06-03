@@ -82,8 +82,9 @@ type fifo struct {
 	cancel context.CancelFunc
 
 	finishCond *sync.Cond
-	donec      chan struct{}
-	lg         *zap.Logger
+	// TODO simfg pr 这个变量好像没有使用
+	donec chan struct{}
+	lg    *zap.Logger
 }
 
 // NewFIFOScheduler returns a Scheduler that schedules jobs in FIFO
@@ -111,7 +112,13 @@ func (f *fifo) Schedule(j Job) {
 		panic("schedule: schedule to stopped scheduler")
 	}
 
+	/***
+	如果为0，激活调度器
+	*/
 	if len(f.pendings) == 0 {
+		/***
+		select的用法，参考：https://www.jianshu.com/p/2a1146dc42c3
+		*/
 		select {
 		case f.resume <- struct{}{}:
 		default:
@@ -138,6 +145,10 @@ func (f *fifo) Finished() int {
 	return f.finished
 }
 
+/***
+Tips: Wait不会导致当前线程堵塞，所以run方法可以持续执行
+另外这里要用for，因为每次Broadcast，会往下执行，但是不能保证执行完成后就达到数量，所以需要一个循环
+*/
 func (f *fifo) WaitFinish(n int) {
 	f.finishCond.L.Lock()
 	for f.finished < n || len(f.pendings) != 0 {
@@ -155,6 +166,10 @@ func (f *fifo) Stop() {
 	<-f.donec
 }
 
+/***
+持续从pendings数组中获取job进行执行
+如果context结束，会将队列中的队列全部执行
+*/
 func (f *fifo) run() {
 	defer func() {
 		close(f.donec)
