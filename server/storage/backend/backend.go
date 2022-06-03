@@ -121,6 +121,7 @@ type backend struct {
 	donec chan struct{}
 
 	hooks Hooks
+	// TODO simfg confuse 将这个txPostLockInsideApplyHook 放置 Hooks接口中
 
 	// txPostLockInsideApplyHook is called each time right after locking the tx.
 	txPostLockInsideApplyHook func()
@@ -159,10 +160,16 @@ func DefaultBackendConfig(lg *zap.Logger) BackendConfig {
 	}
 }
 
+/***
+TODO simfg 有了newBackend，为啥还要有一个这个方法
+*/
 func New(bcfg BackendConfig) Backend {
 	return newBackend(bcfg)
 }
 
+/***
+TODO simfg 这里与DefaultBackendConfig，感觉有点奇怪，为啥不直接吧Path也放到构造方法里
+*/
 func NewDefaultBackend(lg *zap.Logger, path string) Backend {
 	bcfg := DefaultBackendConfig(lg)
 	bcfg.Path = path
@@ -218,6 +225,9 @@ func newBackend(bcfg BackendConfig) *backend {
 		lg: bcfg.Logger,
 	}
 
+	/***
+	这里面会初始化readTx和batchTx里面的数据库tx
+	*/
 	b.batchTx = newBatchTxBuffered(b)
 	// We set it after newBatchTxBuffered to skip the 'empty' commit.
 	b.hooks = bcfg.Hooks
@@ -326,6 +336,9 @@ func (b *backend) ForceCommit() {
 	b.batchTx.Commit()
 }
 
+/*** 获得备份对象
+调用WriteTo(w io.Writer) (n int64, err error)，将备份写入到流中
+*/
 func (b *backend) Snapshot() Snapshot {
 	b.batchTx.Commit()
 
@@ -370,6 +383,10 @@ func (b *backend) Snapshot() Snapshot {
 	return &snapshot{tx, stopc, donec}
 }
 
+/***
+数据库的hash计算
+bucket name 及其所有key\value都会参与计算
+*/
 func (b *backend) Hash(ignores func(bucketName, keyName []byte) bool) (uint32, error) {
 	h := crc32.New(crc32.MakeTable(crc32.Castagnoli))
 
@@ -444,6 +461,15 @@ func (b *backend) Defrag() error {
 	return b.defrag()
 }
 
+/***
+先创建一个临时文件
+然后将当前db的数据迁移值这个临时文件
+然后将这个临时文件重命名成之前db的文件名
+TODO simfg 这个函数的作用是什么呢，有点奇怪，
+	看了下git的提交记录，support shrink db，支持压缩数据库？
+	实现中好像没有看到什么压缩的操作，难道数据库大小跟事务多少有关还是，如果是跟事务多少有关，直接进行一下commit是不是就好了
+TODO simfg confuse 如果空间不足，导致迁移过程中失败了；这里是不是可以和下载文件一样，在迁移之前，先校验一下是否有足够的容量，在生成一个和现在db一样大的文件，然后进行写入
+*/
 func (b *backend) defrag() error {
 	now := time.Now()
 	isDefragActive.Set(1)
@@ -559,6 +585,9 @@ func (b *backend) defrag() error {
 	return nil
 }
 
+/***将 odb 里面的数据迁移到 tmpdb
+limit表示每一次事务的数据量
+*/
 func defragdb(odb, tmpdb *bolt.DB, limit int) error {
 	// open a tx on tmpdb for writes
 	tmptx, err := tmpdb.Begin(true)
@@ -618,6 +647,9 @@ func defragdb(odb, tmpdb *bolt.DB, limit int) error {
 	return tmptx.Commit()
 }
 
+/*** 参数write，true表示写，false表示读
+创建一个事务
+*/
 func (b *backend) begin(write bool) *bolt.Tx {
 	b.mu.RLock()
 	tx := b.unsafeBegin(write)

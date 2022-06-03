@@ -146,6 +146,9 @@ func (t *batchTx) UnsafeSeqPut(bucket Bucket, key []byte, value []byte) {
 	t.unsafePut(bucket, key, value, true)
 }
 
+/***
+往bucket中put数据
+*/
 func (t *batchTx) unsafePut(bucketType Bucket, key []byte, value []byte, seq bool) {
 	bucket := t.tx.Bucket(bucketType.Name())
 	if bucket == nil {
@@ -183,6 +186,9 @@ func (t *batchTx) UnsafeRange(bucketType Bucket, key, endKey []byte, limit int64
 	return unsafeRange(bucket.Cursor(), key, endKey, limit)
 }
 
+/***
+根据输入的blot，遍历查询key与endKey之间的值，然后将其key与对应的value进行返回
+*/
 func unsafeRange(c *bolt.Cursor, key, endKey []byte, limit int64) (keys [][]byte, vs [][]byte) {
 	if limit <= 0 {
 		limit = math.MaxInt64
@@ -287,6 +293,9 @@ func (t *batchTx) commit(stop bool) {
 	}
 }
 
+/***
+这个对于batchTx没有取到什么作用，主要是在读的时候可以获取这里的数据
+*/
 type batchTxBuffered struct {
 	batchTx
 	buf txWriteBuffer
@@ -309,6 +318,9 @@ func (t *batchTxBuffered) Unlock() {
 		t.backend.readTx.Lock() // blocks txReadBuffer for writing.
 		t.buf.writeback(&t.backend.readTx.buf)
 		t.backend.readTx.Unlock()
+		/*** TODO simfg confuse
+		为什么这里不直接调用 t.batchTx.Unlock()，这部分代码可以删除
+		*/
 		if t.pending >= t.backend.batchLimit {
 			t.commit(false)
 		}

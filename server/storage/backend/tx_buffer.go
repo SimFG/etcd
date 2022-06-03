@@ -26,6 +26,10 @@ type txBuffer struct {
 	buckets map[BucketID]*bucketBuffer
 }
 
+/*** 清除bucket
+1. 循环bucket的map，如果buffer还没有开始使用，则直接移出bucket，然后将used置为0
+Tips: 每次往buffer里面添加元素，都是使用used作为下标进行添加，所以used为0表示在buffer里面没有有效缓存
+*/
 func (txb *txBuffer) reset() {
 	for k, v := range txb.buckets {
 		if v.used == 0 {
@@ -37,6 +41,11 @@ func (txb *txBuffer) reset() {
 }
 
 // txWriteBuffer buffers writes of pending updates that have not yet committed.
+/***
+TODO simfg bucket2seq什么作用
+
+bucket2seq 标识put进来的元素是否有序？
+*/
 type txWriteBuffer struct {
 	txBuffer
 	// Map from bucket ID into information whether this bucket is edited
@@ -63,18 +72,35 @@ func (txw *txWriteBuffer) putInternal(bucket Bucket, k, v []byte) {
 	b.add(k, v)
 }
 
+/***
+1. 将bucket内的buffer清除
+2. 遍历bucket2seq，如果元素不存在与bucket内，则删除该元素；如果获取的buf的used为0，则将对应位置的元素置为true
+*/
 func (txw *txWriteBuffer) reset() {
 	txw.txBuffer.reset()
 	for k := range txw.bucket2seq {
-		v, ok := txw.buckets[k]
-		if !ok {
+		_, ok := txw.buckets[k]
+		if !ok { // TODO simfg 什么情况下会存在这种情况，bucket2seq有，但是buckets没有
 			delete(txw.bucket2seq, k)
-		} else if v.used == 0 {
+			//} else if v.used == 0 { // TODO simfg confuse 因为txw.txBuffer.reset()已经将所有的used置为0，这部分是不是不用再一次做判断
+			//	txw.bucket2seq[k] = true
+			//}
+
+		} else {
 			txw.bucket2seq[k] = true
 		}
 	}
 }
 
+/*** 将当前buf的数据写入到readBuf中
+1. 遍历bucket数组
+1.1	查看输入txr里面是否有遍历元素，如果没有，删除当前bucket，并将对应的元素赋值给输入
+1.2 查看bucket2seq对应的元素，如果为false且bucket里的buffer存在元素，则进行排序
+1.3 将当前buf元素合并到输入的buf中
+2. 重置当前buf
+
+TODO simfg confuse 这里的sort，因为buf中的数据是通过used进行标识，但是排序的时候直接使用的序号，这里会不会导致将reset的元素被重新使用呢
+*/
 func (txw *txWriteBuffer) writeback(txr *txReadBuffer) {
 	for k, wb := range txw.buckets {
 		rb, ok := txr.buckets[k]
@@ -94,13 +120,22 @@ func (txw *txWriteBuffer) writeback(txr *txReadBuffer) {
 	txr.bufVersion++
 }
 
+/***
+txBuffer 一个map，key为bucketId，value为bucketBuffer，bucketBuffer里面是一个数组
+*/
 // txReadBuffer accesses buffered updates.
+/***
+bufVersion TODO simfg 有什么作用
+*/
 type txReadBuffer struct {
 	txBuffer
 	// bufVersion is used to check if the buffer is modified recently
 	bufVersion uint64
 }
 
+/***
+根据输入bucket获取到对应的buffer，然后找出key/end范围内的值
+*/
 func (txr *txReadBuffer) Range(bucket Bucket, key, endKey []byte, limit int64) ([][]byte, [][]byte) {
 	if b := txr.buckets[bucket.ID()]; b != nil {
 		return b.Range(key, endKey, limit)
@@ -108,6 +143,9 @@ func (txr *txReadBuffer) Range(bucket Bucket, key, endKey []byte, limit int64) (
 	return nil, nil
 }
 
+/***
+根据输入bucket获取到对应的buffer，然后对buffer内的值都调用visitor函数
+*/
 func (txr *txReadBuffer) ForEach(bucket Bucket, visitor func(k, v []byte) error) error {
 	if b := txr.buckets[bucket.ID()]; b != nil {
 		return b.ForEach(visitor)
@@ -141,12 +179,24 @@ type bucketBuffer struct {
 	used int
 }
 
+/***
+创建一个bucketBuffer，其内部的buf数组直接被指定大小，后续赋值使用buf[index]进行赋值
+*/
 func newBucketBuffer() *bucketBuffer {
 	return &bucketBuffer{buf: make([]kv, bucketBufferInitialSize), used: 0}
 }
 
+/***
+获取key/endKey之间的值
+1. 在buf中获取key的索引
+2. 如果endKey不存在，则比较索引对应的key与输入key
+3. 获取buf中在key, endKey之间的值
+*/
 func (bb *bucketBuffer) Range(key, endKey []byte, limit int64) (keys [][]byte, vals [][]byte) {
 	f := func(i int) bool { return bytes.Compare(bb.buf[i].key, key) >= 0 }
+	/***
+	二分法搜索，找到buf数组中最靠左的大于等于key的值
+	*/
 	idx := sort.Search(bb.used, f)
 	if idx < 0 || idx >= bb.used {
 		return nil, nil
@@ -171,6 +221,9 @@ func (bb *bucketBuffer) Range(key, endKey []byte, limit int64) (keys [][]byte, v
 	return keys, vals
 }
 
+/***
+使用输入的visitor函数访问所有的buf元素
+*/
 func (bb *bucketBuffer) ForEach(visitor func(k, v []byte) error) error {
 	for i := 0; i < bb.used; i++ {
 		if err := visitor(bb.buf[i].key, bb.buf[i].val); err != nil {
@@ -180,6 +233,9 @@ func (bb *bucketBuffer) ForEach(visitor func(k, v []byte) error) error {
 	return nil
 }
 
+/***添加缓存
+如果添加缓存后，buf数组没有容量，则进行1.5倍扩容
+*/
 func (bb *bucketBuffer) add(k, v []byte) {
 	bb.buf[bb.used].key, bb.buf[bb.used].val = k, v
 	bb.used++
@@ -191,6 +247,14 @@ func (bb *bucketBuffer) add(k, v []byte) {
 }
 
 // merge merges data from bbsrc into bb.
+/***
+1. 将输入的buf所有内容添加到当前缓存中
+2. 如果当前缓存长度为0，直接返回
+3. 如果在未添加元素钱当前缓存的最后key值小于输入buf的第一个key，直接返回
+4. 给元素进行排序
+5. 去除重复元素
+Tips: buf数组中的元素是有序的
+*/
 func (bb *bucketBuffer) merge(bbsrc *bucketBuffer) {
 	for i := 0; i < bbsrc.used; i++ {
 		bb.add(bbsrc.buf[i].key, bbsrc.buf[i].val)

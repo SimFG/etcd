@@ -50,6 +50,13 @@ type baseReadTx struct {
 	txWg *sync.WaitGroup
 }
 
+/*** 这个逻辑感觉怪怪的
+1. 将buf里面的数据访问一边，将其数据进行标记
+2. 遍历bblot里的数据，如果数据已经存在缓存，则跳过
+3. 遍历缓存中的数据
+TODO simfg confuse 感觉很奇怪，为啥不直接全部读bblot中的数据呢，难道因为visitor函数里面存在耗时操作，然后将这部分拆开，提高并发？
+如果是这样，为啥不直接把这部分数据读出来，放入缓存，然后在使用visit进行遍历，如果为了防止缓存过大，那么直接将读出来的数据全部放到临时变量中，读取之后在进行visit
+*/
 func (baseReadTx *baseReadTx) UnsafeForEach(bucket Bucket, visitor func(k, v []byte) error) error {
 	dups := make(map[string]struct{})
 	getDups := func(k, v []byte) error {
@@ -74,6 +81,16 @@ func (baseReadTx *baseReadTx) UnsafeForEach(bucket Bucket, visitor func(k, v []b
 	return baseReadTx.buf.ForEach(bucket, visitor)
 }
 
+/*** 在Bucket中获取key与endKey范围内的值
+1. 处理limit，如果endKey不存在，则是查询key对应的value；如果limit小于等于，则查询所有的值
+2. 如果是范围查询，检查bucket当前是否可以进行范围查询 TODO simfg 不太明白这个为啥
+3. 查询缓存中的数据，是否符合条件
+4. 获取事务中的缓存bucket，如果没有获取到，则从blot数据库中获取
+5. 然后获取bucket的cursor，进行数据遍历
+6. 将数据进行组合返回
+
+TODO simfg confuse 缓存数据中与数据库中数据，会不会存在重复现象，因为在进行数据库中数据查询时，将limit减少了
+*/
 func (baseReadTx *baseReadTx) UnsafeRange(bucketType Bucket, key, endKey []byte, limit int64) ([][]byte, [][]byte) {
 	if endKey == nil {
 		// forbid duplicates for single keys
@@ -86,6 +103,9 @@ func (baseReadTx *baseReadTx) UnsafeRange(bucketType Bucket, key, endKey []byte,
 		panic("do not use unsafeRange on non-keys bucket")
 	}
 	keys, vals := baseReadTx.buf.Range(bucketType, key, endKey, limit)
+	/***
+	这里的返回的key数量不可能超过limit，因为这个Range方法内部做了限制
+	*/
 	if int64(len(keys)) == limit {
 		return keys, vals
 	}
@@ -120,6 +140,9 @@ func (baseReadTx *baseReadTx) UnsafeRange(bucketType Bucket, key, endKey []byte,
 	return append(k2, keys...), append(v2, vals...)
 }
 
+/***
+安全读，也就是不支持并发，每次操作都会进行相应的锁
+*/
 type readTx struct {
 	baseReadTx
 }
@@ -136,6 +159,9 @@ func (rt *readTx) reset() {
 	rt.txWg = new(sync.WaitGroup)
 }
 
+/***
+并发读，对于数据准确性要求较低
+*/
 type concurrentReadTx struct {
 	baseReadTx
 }
