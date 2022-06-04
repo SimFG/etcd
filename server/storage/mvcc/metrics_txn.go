@@ -20,6 +20,9 @@ import (
 	"go.etcd.io/etcd/server/v3/lease"
 )
 
+/***
+对基本的读写的次数进行监控
+*/
 type metricsTxnWrite struct {
 	TxnWrite
 	ranges  uint

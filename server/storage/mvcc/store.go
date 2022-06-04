@@ -19,6 +19,9 @@ import (
 	"go.etcd.io/etcd/server/v3/storage/schema"
 )
 
+/***
+finishedCompact，这个表示已经完成compact的版本，在执行完一部分db的compact的操作后会更新值，见：文件kvstore_compaction.go store.scheduleCompaction L62
+*/
 func UnsafeReadFinishedCompact(tx backend.ReadTx) (finishedComact int64, found bool) {
 	_, finishedCompactBytes := tx.UnsafeRange(schema.Meta, schema.FinishedCompactKeyName, nil, 0)
 	if len(finishedCompactBytes) != 0 {
@@ -27,6 +30,9 @@ func UnsafeReadFinishedCompact(tx backend.ReadTx) (finishedComact int64, found b
 	return 0, false
 }
 
+/***
+scheduledComact，这个表示当前正在准备进行compact操作，在进行compact操作之前，会先设置这个值，见：kvstore.go store.updateCompactRev L255
+*/
 func UnsafeReadScheduledCompact(tx backend.ReadTx) (scheduledComact int64, found bool) {
 	_, scheduledCompactBytes := tx.UnsafeRange(schema.Meta, schema.ScheduledCompactKeyName, nil, 0)
 	if len(scheduledCompactBytes) != 0 {

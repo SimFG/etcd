@@ -25,6 +25,9 @@ import (
 	"go.uber.org/zap"
 )
 
+/***
+read 操作，先从treeIndex中获取相应的revision信息，然后取db中获取value相关的信息
+*/
 type storeTxnRead struct {
 	s  *store
 	tx backend.ReadTx
@@ -179,6 +182,9 @@ func (tw *storeTxnWrite) End() {
 	tw.s.mu.RUnlock()
 }
 
+/*** put 操作，先通过treeIndex获取到version信息
+然后更新数据库和treeIndex的信息
+*/
 func (tw *storeTxnWrite) put(key, value []byte, leaseID lease.LeaseID) {
 	rev := tw.beginRev + 1
 	c := rev

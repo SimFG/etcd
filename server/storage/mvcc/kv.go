@@ -23,6 +23,16 @@ import (
 	"go.etcd.io/etcd/server/v3/storage/backend"
 )
 
+/***
+一系列接口
+ReadView、TxnRead
+WriteView、TxnWrite
+txnReadWrite 这个主要用于metric的监听，是一个结构体
+KV
+WatchableKV
+Watchable
+*/
+
 type RangeOptions struct {
 	Limit int64
 	Rev   int64

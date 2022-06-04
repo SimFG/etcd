@@ -139,6 +139,9 @@ func NewStore(lg *zap.Logger, b backend.Backend, le lease.Lessor, cfg StoreConfi
 	return s
 }
 
+/***
+TODO simfg 这个方法有什么作用呢
+*/
 func (s *store) compactBarrier(ctx context.Context, ch chan struct{}) {
 	if ctx == nil || ctx.Err() != nil {
 		select {
@@ -158,6 +161,9 @@ func (s *store) compactBarrier(ctx context.Context, ch chan struct{}) {
 	close(ch)
 }
 
+/***
+计算当前所有数据的hash值
+*/
 func (s *store) hash() (hash uint32, revision int64, err error) {
 	// TODO: hash and revision could be inconsistent, one possible fix is to add s.revMu.RLock() at the beginning of function, which is costly
 	start := time.Now()
@@ -169,6 +175,9 @@ func (s *store) hash() (hash uint32, revision int64, err error) {
 	return h, s.currentRev, err
 }
 
+/***
+计算rev版本对应数据的hash值
+*/
 func (s *store) hashByRev(rev int64) (hash KeyValueHash, currentRev int64, err error) {
 	var compactRev int64
 	start := time.Now()
@@ -199,9 +208,17 @@ func (s *store) hashByRev(rev int64) (hash KeyValueHash, currentRev int64, err e
 	return hash, currentRev, err
 }
 
+/***
+更新当前compact的version版本信息
+*/
 func (s *store) updateCompactRev(rev int64) (<-chan struct{}, int64, error) {
 	s.revMu.Lock()
+	// TODO simfg pr 将unlock操作提取
+	defer s.revMu.Unlock()
 	if rev <= s.compactMainRev {
+		/***
+		TODO simfg 为什么这部分最后结果报错了，还需要执行这样的逻辑
+		*/
 		ch := make(chan struct{})
 		f := schedule.NewJob("kvstore_updateCompactRev_compactBarrier", func(ctx context.Context) { s.compactBarrier(ctx, ch) })
 		s.fifoSched.Schedule(f)
@@ -224,6 +241,10 @@ func (s *store) updateCompactRev(rev int64) (<-chan struct{}, int64, error) {
 	return nil, compactMainRev, nil
 }
 
+/*** 通过调度器执行compact操作，处理旧数据
+对treeIndex执行compat操作
+对db执行相应的compat操作
+*/
 func (s *store) compact(trace *traceutil.Trace, rev, prevCompactRev int64) (<-chan struct{}, error) {
 	ch := make(chan struct{})
 	j := schedule.NewJob("kvstore_compact", func(ctx context.Context) {
@@ -246,6 +267,9 @@ func (s *store) compact(trace *traceutil.Trace, rev, prevCompactRev int64) (<-ch
 	return ch, nil
 }
 
+/***
+无锁版的Compact
+*/
 func (s *store) compactLockfree(rev int64) (<-chan struct{}, error) {
 	ch, prevCompactRev, err := s.updateCompactRev(rev)
 	if err != nil {
@@ -255,6 +279,9 @@ func (s *store) compactLockfree(rev int64) (<-chan struct{}, error) {
 	return s.compact(traceutil.TODO(), rev, prevCompactRev)
 }
 
+/***
+更新compactRevision，然后进行compact
+*/
 func (s *store) Compact(trace *traceutil.Trace, rev int64) (<-chan struct{}, error) {
 	s.mu.Lock()
 
@@ -275,6 +302,10 @@ func (s *store) Commit() {
 	s.b.ForceCommit()
 }
 
+/***
+对store的信息进行重置，
+然后通过读取数据库对所有的缓存信息进行更新，包括了treeIndex及其lease
+*/
 func (s *store) Restore(b backend.Backend) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -299,6 +330,14 @@ func (s *store) Restore(b backend.Backend) error {
 	return s.restore()
 }
 
+/***
+从数据库中读取信息更新到缓存中，包括了更新treeIndex和lease
+1. 获取到compact的信息，包括了finishedCompact和scheduledCompact
+2. 更新treeIndex信息
+3. 更新lease信息
+4. 处理compact，包括db和treeIndex
+TODO simfg 假如先compact，在更新treeIndex和lease
+*/
 func (s *store) restore() error {
 	s.setupMetricsReporter()
 
@@ -397,12 +436,27 @@ func (s *store) restore() error {
 	return nil
 }
 
+/***
+key: 指的是revision
+kv: 指的是用户的键值对
+kstr： 指的是用户的键值对key
+*/
 type revKeyValue struct {
 	key  []byte
 	kv   mvccpb.KeyValue
 	kstr string
 }
 
+/*** 这里主要是根据chan中的数据信息，将信息更新treeIndex中
+返回两个chan，一个是数据列表**写**chan，另外一个是当前版本序号**读**chan
+启动协程，关闭的时候往版本序号的chan写入版本
+1. 读取数据列表chan中的数据（如果不关闭chan将会报错，这里会等待到chan关闭）
+2. 查看kiCache中是否包含数据且长度是否大于等于chan缓存长度，如果是，将会删除kiCache数据的10个元素
+3. 查看kiCache中是否包含数据，如果不包含，查看treeIndex是否包含这个index，如果包含，则写入kiCache中
+4. 更新currentRev
+5. 如果这个时候在缓存中找到数据，判断是否是过期，如果是更新到treeIndex中，如果不是，更新treeIndex的版本信息
+6. 如果revision没有过期，将信息保存至treeIndex中和kiCache中
+*/
 func restoreIntoIndex(lg *zap.Logger, idx index) (chan<- revKeyValue, <-chan int64) {
 	rkvc, revc := make(chan revKeyValue, restoreChunkKeys), make(chan int64, 1)
 	go func() {
@@ -450,6 +504,10 @@ func restoreIntoIndex(lg *zap.Logger, idx index) (chan<- revKeyValue, <-chan int
 	return rkvc, revc
 }
 
+/*** 将数据发送到kvc的channel中
+其中keys表示revision数组，vals包含了用户输入的key和value信息
+keyToLease是一个map，其中key是用户输入的key，就是键值对中的key
+*/
 func restoreChunk(lg *zap.Logger, kvc chan<- revKeyValue, keys, vals [][]byte, keyToLease map[string]lease.LeaseID) {
 	for i, key := range keys {
 		rkv := revKeyValue{key: key}
@@ -474,6 +532,9 @@ func (s *store) Close() error {
 	return nil
 }
 
+/***
+监控函数初始化
+*/
 func (s *store) setupMetricsReporter() {
 	b := s.b
 	reportDbTotalSizeInBytesMu.Lock()
@@ -501,6 +562,9 @@ func (s *store) setupMetricsReporter() {
 	reportCompactRevMu.Unlock()
 }
 
+/***
+将revision标记为过期
+*/
 // appendMarkTombstone appends tombstone mark to normal revision bytes.
 func appendMarkTombstone(lg *zap.Logger, b []byte) []byte {
 	if len(b) != revBytesLen {

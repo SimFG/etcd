@@ -21,6 +21,11 @@ import (
 	"go.etcd.io/etcd/server/v3/lease"
 )
 
+/***
+readView与writeView
+是ReadView与WriteView接口的实现
+*/
+
 type readView struct{ kv KV }
 
 func (rv *readView) FirstRev() int64 {

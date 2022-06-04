@@ -23,6 +23,12 @@ import (
 	"go.uber.org/zap"
 )
 
+/***
+执行db级别的compact操作
+循环处理
+每次处理限制个数：s.cfg.CompactionBatchLimit
+每次处理存在间隔：s.cfg.CompactionSleepInterval
+*/
 func (s *store) scheduleCompaction(compactMainRev, prevCompactRev int64) (KeyValueHash, error) {
 	totalStart := time.Now()
 	keep := s.kvindex.Compact(compactMainRev)
