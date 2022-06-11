@@ -105,6 +105,14 @@ type watchStream struct {
 }
 
 // Watch creates a new watcher in the stream and returns its WatchID.
+/*** 创建一个watcher
+- 判断key end是否是一个合法的字符串范围
+- stream 是否关闭
+- 生成watcherId
+	- 如果是自生成watcherId，则根据nextID自增找到一个位置
+	- 如果是指定的，则判断该位置是否存在watcher
+- 调用watchable生成watcher，并保存watcher和其对应取消的函数
+*/
 func (ws *watchStream) Watch(id WatchID, key, end []byte, startRev int64, fcs ...FilterFunc) (WatchID, error) {
 	// prevent wrong range where key >= end lexicographically
 	// watch request with 'WithFromKey' has empty-byte range end
@@ -139,6 +147,12 @@ func (ws *watchStream) Chan() <-chan WatchResponse {
 	return ws.ch
 }
 
+/*** 取消某个watcher
+- 根据id获取watcher
+- 判断watcher是否存在
+- 调用取消
+- 然后删除watchers和cancels列表
+*/
 func (ws *watchStream) Cancel(id WatchID) error {
 	ws.mu.Lock()
 	cancel, ok := ws.cancels[id]
@@ -164,6 +178,11 @@ func (ws *watchStream) Cancel(id WatchID) error {
 	return nil
 }
 
+/***
+关闭当前stream
+- 根据cancels列表中，调用cancel方法
+- 更新closed值
+*/
 func (ws *watchStream) Close() {
 	ws.mu.Lock()
 	defer ws.mu.Unlock()
@@ -182,6 +201,9 @@ func (ws *watchStream) Rev() int64 {
 	return ws.watchable.rev()
 }
 
+/***
+查看watcher的请求进度
+*/
 func (ws *watchStream) RequestProgress(id WatchID) {
 	ws.mu.Lock()
 	w, ok := ws.watchers[id]

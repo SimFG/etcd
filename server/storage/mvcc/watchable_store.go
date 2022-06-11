@@ -56,10 +56,12 @@ type watchableStore struct {
 	victimc chan struct{}
 
 	// contains all unsynced watchers that needs to sync with events that have happened
+	// 包含所有需要与已发生事件同步的未同步观察者
 	unsynced watcherGroup
 
 	// contains all synced watchers that are in sync with the progress of the store.
 	// The key of the map is the key that the watcher watches on.
+	// 正在同步的watcher
 	synced watcherGroup
 
 	stopc chan struct{}
@@ -74,6 +76,9 @@ func New(lg *zap.Logger, b backend.Backend, le lease.Lessor, cfg StoreConfig) Wa
 	return newWatchableStore(lg, b, le, cfg)
 }
 
+/*** 创建watcherStore，主要用来管理watcher和发送事件
+在返回之前，会开启两个协程，循环处理事件，一个是处理unsynced列表中的为同步的watcher，另外一个是处理同步失败的事件
+*/
 func newWatchableStore(lg *zap.Logger, b backend.Backend, le lease.Lessor, cfg StoreConfig) *watchableStore {
 	if lg == nil {
 		lg = zap.NewNop()
@@ -103,6 +108,9 @@ func (s *watchableStore) Close() error {
 	return s.store.Close()
 }
 
+/***
+管理watcher的状态
+*/
 func (s *watchableStore) NewWatchStream() WatchStream {
 	watchStreamGauge.Inc()
 	return &watchStream{
@@ -113,6 +121,13 @@ func (s *watchableStore) NewWatchStream() WatchStream {
 	}
 }
 
+/*** 创建一个watcher
+- 创建watcher
+- 如果开始版本大于当前版本，则将watcher添加到synced列表中，
+	- 这个是因为如果当前还没有到这个watcher要开始处理的最小版本，自然就不需要进行同步，到了版本之后自然就会进行
+	- 而对于开始版本小于当前版本，自然这时候就需要将之前未同步的事件进行额外的同步操作，所以就需要添加到unsynced（这里面的事件在创建watchableStore开始时就开启了一个协程进行处理）
+- 否则添加到unsynced列表中
+*/
 func (s *watchableStore) watch(key, end []byte, startRev int64, id WatchID, ch chan<- WatchResponse, fcs ...FilterFunc) (*watcher, cancelFunc) {
 	wa := &watcher{
 		key:    key,
@@ -145,6 +160,13 @@ func (s *watchableStore) watch(key, end []byte, startRev int64, id WatchID, ch c
 }
 
 // cancelWatcher removes references of the watcher from the watchableStore
+/*** 从store中删除一个watcher
+- 从unsynced中寻找
+- 从synced中寻找
+- watcher是否已经被compacted
+- watcher是否已经被取消
+- 从victims中寻找
+*/
 func (s *watchableStore) cancelWatcher(wa *watcher) {
 	for {
 		s.mu.Lock()
@@ -191,6 +213,11 @@ func (s *watchableStore) cancelWatcher(wa *watcher) {
 	s.mu.Unlock()
 }
 
+/*** 重置watchableStore
+- 替换backend
+- 将所有synced全部移至unsynced中
+- 重新创建synced
+*/
 func (s *watchableStore) Restore(b backend.Backend) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -208,6 +235,10 @@ func (s *watchableStore) Restore(b backend.Backend) error {
 }
 
 // syncWatchersLoop syncs the watcher in the unsynced map every 100ms.
+/***
+处理未同步的watcher
+核心逻辑：s.syncWatchers()，返回值标识还有多少未同步的watcher
+*/
 func (s *watchableStore) syncWatchersLoop() {
 	defer s.wg.Done()
 
@@ -225,6 +256,8 @@ func (s *watchableStore) syncWatchersLoop() {
 
 		waitDuration := 100 * time.Millisecond
 		// more work pending?
+		// 根据当前处理的时间间隔进行调整
+		// TODO simfg 不太理解
 		if unsyncedWatchers != 0 && lastUnsyncedWatchers > unsyncedWatchers {
 			// be fair to other store operations by yielding time taken
 			waitDuration = syncDuration
@@ -240,6 +273,11 @@ func (s *watchableStore) syncWatchersLoop() {
 
 // syncVictimsLoop tries to write precomputed watcher responses to
 // watchers that had a blocked watcher channel
+/*** 处理watcherResponse发送失败的watcher
+其核心逻辑：s.moveVictims()
+- 如果moveVictims()返回0，表示没有可发送的事件了
+- 如果不是空的，则开启定时器，10毫米后进行下一次循环处理
+*/
 func (s *watchableStore) syncVictimsLoop() {
 	defer s.wg.Done()
 
@@ -266,6 +304,13 @@ func (s *watchableStore) syncVictimsLoop() {
 }
 
 // moveVictims tries to update watches with already pending event data
+/*** 处理未发送的event，也就是遍历s.victims
+（watcherBatch：一个map，key为watcher，value为对应的event列表）
+- 遍历watcherBatch，逐一发送事件，如果发送失败，记录在newVictim中
+- 所有的事件都发送后，在遍历一次，将发送成功的事件更新至synced或unsynced列表中
+TODO simfg 为什么这里还会将watcher添加到synced中
+- 返回当前发送事件的数量
+*/
 func (s *watchableStore) moveVictims() (moved int) {
 	s.mu.Lock()
 	victims := s.victims
@@ -328,6 +373,15 @@ func (s *watchableStore) moveVictims() (moved int) {
 //	2. iterate over the set to get the minimum revision and remove compacted watchers
 //	3. use minimum revision to get all key-value pairs and send those events to watchers
 //	4. remove synced watchers in set from unsynced group and move to synced group
+/*** 同步未同步的watcher
+- 从未同步的watcherGroup中选择一部分watcher
+- 获取最大版本与最小版本号
+- 根据版本范围从数据库中获取kv
+- 根据获取的kv生成事件列表
+- 发送event
+- 更新unsynced列表，删除已经发送event的watcher
+TODO simfg victim 标识发送消息失败，将其对应的watcher存入victims
+*/
 func (s *watchableStore) syncWatchers() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -407,6 +461,11 @@ func (s *watchableStore) syncWatchers() int {
 }
 
 // kvsToEvents gets all events for the watchers from all key-value pairs
+/*** 根据从数据库查出的key（revs参数），value（vals参数）和对应的watcherGroup生成event列表
+- 获取用户keyValue（其实就是使用ectd时的键值对）
+- 如果watcherGroup中不包含，进行下一次循环，否则：
+- 生成事件标志，然后将事件添加到数组中
+*/
 func kvsToEvents(lg *zap.Logger, wg *watcherGroup, revs, vals [][]byte) (evs []mvccpb.Event) {
 	for i, v := range vals {
 		var kv mvccpb.KeyValue
@@ -431,6 +490,9 @@ func kvsToEvents(lg *zap.Logger, wg *watcherGroup, revs, vals [][]byte) (evs []m
 
 // notify notifies the fact that given event at the given rev just happened to
 // watchers that watch on the key of the event.
+/*** 将参数里的events列表，逐一发送到synced中的watcher
+将发送失败的添加到victim列表中
+*/
 func (s *watchableStore) notify(rev int64, evs []mvccpb.Event) {
 	victim := make(watcherBatch)
 	for w, eb := range newWatcherBatch(&s.synced, evs) {
@@ -454,6 +516,10 @@ func (s *watchableStore) notify(rev int64, evs []mvccpb.Event) {
 	s.addVictim(victim)
 }
 
+/*** 将发送失败的watcherBatch保存起来
+- 将victim添加到victims
+- 然后往victimc这个chan中更新信号，这样在创建watchableStore时启动的一个协程就可以收到消息
+*/
 func (s *watchableStore) addVictim(victim watcherBatch) {
 	if len(victim) == 0 {
 		return
@@ -467,6 +533,9 @@ func (s *watchableStore) addVictim(victim watcherBatch) {
 
 func (s *watchableStore) rev() int64 { return s.store.Rev() }
 
+/***
+往watcher发送一个空的response，这时候watcher会接收到这个空的response
+*/
 func (s *watchableStore) progress(w *watcher) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -509,6 +578,11 @@ type watcher struct {
 	ch chan<- WatchResponse
 }
 
+/*** 发送watcher应答
+- 查看watcher中是否有过滤函数列表，如果有，将需要过滤的事件进行删除
+- 查看是否还有事件需要发送
+- 通过携程发送应答
+*/
 func (w *watcher) send(wr WatchResponse) bool {
 	progressEvent := len(wr.Events) == 0
 

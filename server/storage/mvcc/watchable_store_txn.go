@@ -19,6 +19,10 @@ import (
 	"go.etcd.io/etcd/pkg/v3/traceutil"
 )
 
+/***
+根据写事务的变更，生成event列表
+调用s.notify(rev, evs)方法，将event发送给watcher
+*/
 func (tw *watchableStoreTxnWrite) End() {
 	changes := tw.Changes()
 	if len(changes) == 0 {
@@ -51,6 +55,9 @@ type watchableStoreTxnWrite struct {
 	s *watchableStore
 }
 
+/***
+创建一个带有watchable功能的TxnWrite，主要功能是在写txn完成后会主动通知store中的watcher
+*/
 func (s *watchableStore) Write(trace *traceutil.Trace) TxnWrite {
 	return &watchableStoreTxnWrite{s.store.Write(trace), s}
 }

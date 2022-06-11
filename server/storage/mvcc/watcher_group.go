@@ -38,6 +38,14 @@ type eventBatch struct {
 	moreRev int64
 }
 
+/*** 事件列表中添加事件
+- 校验版本
+- 如果列表中无事件，直接添加，然后直接返回
+- 获取事件列表中最后一个事件和输入事件的revision
+	- 如果输入事件大于最后一个事件，revs自增，并判断自增后是否大于watchBatchMaxRevs，如果大于则更新moreRev
+- 将事件添加至列表
+TODO simfg revs moreRev 作用是什么？
+*/
 func (eb *eventBatch) add(ev mvccpb.Event) {
 	if eb.revs > watchBatchMaxRevs {
 		// maxed out batch size
@@ -67,6 +75,9 @@ func (eb *eventBatch) add(ev mvccpb.Event) {
 
 type watcherBatch map[*watcher]*eventBatch
 
+/***
+watcherBatch这个map中添加元素
+*/
 func (wb watcherBatch) add(w *watcher, ev mvccpb.Event) {
 	eb := wb[w]
 	if eb == nil {
@@ -78,6 +89,9 @@ func (wb watcherBatch) add(w *watcher, ev mvccpb.Event) {
 
 // newWatcherBatch maps watchers to their matched events. It enables quick
 // events look up by watcher.
+/***
+将watcherGroup中的watcher与event进行对应
+*/
 func newWatcherBatch(wg *watcherGroup, evs []mvccpb.Event) watcherBatch {
 	if len(wg.watchers) == 0 {
 		return nil
@@ -97,6 +111,9 @@ func newWatcherBatch(wg *watcherGroup, evs []mvccpb.Event) watcherBatch {
 
 type watcherSet map[*watcher]struct{}
 
+/***
+向watcherSet中添加元素，主要是方便查找
+*/
 func (w watcherSet) add(wa *watcher) {
 	if _, ok := w[wa]; ok {
 		panic("add watcher twice!")
@@ -104,12 +121,18 @@ func (w watcherSet) add(wa *watcher) {
 	w[wa] = struct{}{}
 }
 
+/***
+合并两个watcherSet
+*/
 func (w watcherSet) union(ws watcherSet) {
 	for wa := range ws {
 		w.add(wa)
 	}
 }
 
+/***
+删除watchSet中的一个元素
+*/
 func (w watcherSet) delete(wa *watcher) {
 	if _, ok := w[wa]; !ok {
 		panic("removing missing watcher!")
@@ -117,8 +140,12 @@ func (w watcherSet) delete(wa *watcher) {
 	delete(w, wa)
 }
 
+// 以watcher中的key为map的key
 type watcherSetByKey map[string]watcherSet
 
+/***
+向watcherSetByKey添加元素
+*/
 func (w watcherSetByKey) add(wa *watcher) {
 	set := w[string(wa.key)]
 	if set == nil {
@@ -128,6 +155,9 @@ func (w watcherSetByKey) add(wa *watcher) {
 	set.add(wa)
 }
 
+/***
+向watcherSetByKey删除元素
+*/
 func (w watcherSetByKey) delete(wa *watcher) bool {
 	k := string(wa.key)
 	if v, ok := w[k]; ok {
@@ -144,6 +174,11 @@ func (w watcherSetByKey) delete(wa *watcher) bool {
 }
 
 // watcherGroup is a collection of watchers organized by their ranges
+/*** 多个watcher的组合
+包含了 watcherSetByKey（key为watcher的key，value为watch）
+watcherSet（key为watcher，value为空结构）
+adt.IntervalTree 红黑树
+*/
 type watcherGroup struct {
 	// keyWatchers has the watchers that watch on a single key
 	keyWatchers watcherSetByKey
@@ -162,6 +197,11 @@ func newWatcherGroup() watcherGroup {
 }
 
 // add puts a watcher in the group.
+/*** 给group添加元素
+- 将watcher添加到watchers map中
+- 如果当前入参watcher是一个指定的值，则将watcher添加到keyWatchers中
+- 否则，将将范围作为key，更新到红黑树中
+*/
 func (wg *watcherGroup) add(wa *watcher) {
 	wg.watchers.add(wa)
 	if wa.end == nil {
@@ -183,6 +223,9 @@ func (wg *watcherGroup) add(wa *watcher) {
 }
 
 // contains is whether the given key has a watcher in the group.
+/***
+查看当前key是否存在当前watcherGroup中
+*/
 func (wg *watcherGroup) contains(key string) bool {
 	_, ok := wg.keyWatchers[key]
 	return ok || wg.ranges.Intersects(adt.NewStringAffinePoint(key))
@@ -192,6 +235,14 @@ func (wg *watcherGroup) contains(key string) bool {
 func (wg *watcherGroup) size() int { return len(wg.watchers) }
 
 // delete removes a watcher from the group.
+/*** 删除watcher组里的watcher
+- 确认组里是否存在watcher
+- 删除watchers里的watcher，（这是因为每一个watcher被添加时，首先会被添加到watchers中）
+- 如果watcher没有end，那么这个watcher之前就被添加到keyWatchers中了，所以从keyWatchers中移除这个watcher
+- 如果有end，根据watcher的范围，生成Interval，然后在红黑树中进行搜索，如果没有找到，直接返回
+- 否则，取出对应的key，然后将watcherSet中该watcher进行删除
+- 如果删除后watcherSet中不存在值，在红黑树中删除该节点
+*/
 func (wg *watcherGroup) delete(wa *watcher) bool {
 	if _, ok := wg.watchers[wa]; !ok {
 		return false
@@ -221,6 +272,9 @@ func (wg *watcherGroup) delete(wa *watcher) bool {
 }
 
 // choose selects watchers from the watcher group to update
+/*** 从watcher组中选择一些watcher，如果当前组包含watcher不超过maxWatchers，则直接返回当前组，否则就选择maxWatchers，放到一个新的组中
+chooseAll 返回最新的revision
+*/
 func (wg *watcherGroup) choose(maxWatchers int, curRev, compactRev int64) (*watcherGroup, int64) {
 	if len(wg.watchers) < maxWatchers {
 		return wg, wg.chooseAll(curRev, compactRev)
@@ -236,6 +290,9 @@ func (wg *watcherGroup) choose(maxWatchers int, curRev, compactRev int64) (*watc
 	return &ret, ret.chooseAll(curRev, compactRev)
 }
 
+/*** 在watcher组中找出最小的revision
+TODO simfg 两个if判断含义
+*/
 func (wg *watcherGroup) chooseAll(curRev, compactRev int64) int64 {
 	minRev := int64(math.MaxInt64)
 	for w := range wg.watchers {
@@ -268,6 +325,12 @@ func (wg *watcherGroup) chooseAll(curRev, compactRev int64) int64 {
 }
 
 // watcherSetByKey gets the set of watchers that receive events on the given key.
+/*** 将包含key的watcher组合成一个watcherSet
+- 从值watcher列表中获取符合条件的watcherSet
+- 从红黑树中获取范围包含key的watcherSet列表
+- 根据上面两个列表，无需组合的情况进行直接返回
+- 组合两个列表并进行返回
+*/
 func (wg *watcherGroup) watcherSetByKey(key string) watcherSet {
 	wkeys := wg.keyWatchers[key]
 	wranges := wg.ranges.Stab(adt.NewStringAffinePoint(key))

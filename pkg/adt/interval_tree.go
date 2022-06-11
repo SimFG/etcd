@@ -56,6 +56,19 @@ type Interval struct {
 }
 
 // Compare on an interval gives == if the interval overlaps.
+/***
+比较两个区间（a和b），主要是有三个比较，a开头与b开头、a开头与b结尾、a结尾与b开头
+第一个return -1
+a -----
+b      -----
+第二个return 1
+a      -----
+b -----
+最后一个return
+a -----
+b   -----
+
+*/
 func (ivl *Interval) Compare(c Comparable) int {
 	ivl2 := c.(*Interval)
 	ivbCmpBegin := ivl.Begin.Compare(ivl2.Begin)
@@ -63,6 +76,7 @@ func (ivl *Interval) Compare(c Comparable) int {
 	iveCmpBegin := ivl.End.Compare(ivl2.Begin)
 
 	// ivl is left of ivl2
+	// TODO simfg pr 这个ivbCmpBegin是多余的，如果iveCmpBegin <= 0，则ivbCmpBegin < 0是冗余的
 	if ivbCmpBegin < 0 && iveCmpBegin <= 0 {
 		return -1
 	}
@@ -75,6 +89,9 @@ func (ivl *Interval) Compare(c Comparable) int {
 	return 0
 }
 
+/*** 树节点
+IntervalValue 包含一个 Interval ，指明一个范围，和一个val，是一个空接口
+*/
 type intervalNode struct {
 	// iv is the interval-value pair entry.
 	iv IntervalValue
@@ -94,6 +111,9 @@ func (x *intervalNode) color(sentinel *intervalNode) rbcolor {
 	return x.c
 }
 
+/***
+两个节点的高度差，不区分颜色
+*/
 func (x *intervalNode) height(sentinel *intervalNode) int {
 	if x == sentinel {
 		return 0
@@ -106,6 +126,10 @@ func (x *intervalNode) height(sentinel *intervalNode) int {
 	return ld + 1
 }
 
+/***
+寻找一个最小的节点，也就是最左边的节点。
+PS：红黑树是一种特殊的二叉查找树
+*/
 func (x *intervalNode) min(sentinel *intervalNode) *intervalNode {
 	for x.left != sentinel {
 		x = x.left
@@ -114,12 +138,18 @@ func (x *intervalNode) min(sentinel *intervalNode) *intervalNode {
 }
 
 // successor is the next in-order node in the tree
+/*** TODO simfg sentinel这个输入作用是什么 叶子节点标记
+
+当前节点下一个顺序节点
+- 如果输入节点不是当前节点的右节点，直接返回当前节点右节点的最小节点
+- 找到第一个当前节点是父节点的左节点，然后返回
+*/
 func (x *intervalNode) successor(sentinel *intervalNode) *intervalNode {
 	if x.right != sentinel {
 		return x.right.min(sentinel)
 	}
 	y := x.parent
-	for y != sentinel && x == y.right {
+	for y != sentinel && x == y.right { // TODO simfg pr y != sentinel是不需要的条件，因为如果走到这里，x.right == sentinel，不存在 x.parent == x.right
 		x = y
 		y = y.parent
 	}
@@ -127,6 +157,13 @@ func (x *intervalNode) successor(sentinel *intervalNode) *intervalNode {
 }
 
 // updateMax updates the maximum values for a node and its ancestors
+// sentinel 标记、哨兵
+/*** 更新当前节点的最大值
+- 获取当前最大值和当前节点的尾节点
+- 得到左节点、右节点和当前节点中最大的节点
+- 比较获得的最大值与当前最大值
+- 更新max，并向当前节点的父节点进行下一步循环
+*/
 func (x *intervalNode) updateMax(sentinel *intervalNode) {
 	for x != sentinel {
 		oldmax := x.max
@@ -148,6 +185,11 @@ func (x *intervalNode) updateMax(sentinel *intervalNode) {
 type nodeVisitor func(n *intervalNode) bool
 
 // visit will call a node visitor on each node that overlaps the given interval
+// overlaps 重叠
+// 比较输入区间与当前节点区间
+// - 如果输入区间 小于 当前节点区间，则转移到当前节点的左节点
+// - 如果输入区间 大于 当前节点区间，生成一个新区间，然后如果新区间与对比区间比较，为0，则对节点的左右节点均再次调用
+// - 如果为0，则对节点的左右节点均再次调用、当前节点调用nodeVisitor方法
 func (x *intervalNode) visit(iv *Interval, sentinel *intervalNode, nv nodeVisitor) bool {
 	if x == sentinel {
 		return true
@@ -200,6 +242,7 @@ type IntervalTree interface {
 	// Find gets the IntervalValue for the node matching the given interval
 	Find(ivl Interval) *IntervalValue
 	// Intersects returns true if there is some tree node intersecting the given interval.
+	// intersect 相交
 	Intersects(iv Interval) bool
 	// Contains returns true if the interval tree's keys cover the entire given interval.
 	Contains(ivl Interval) bool

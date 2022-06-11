@@ -1,4 +1,5 @@
 # etcd 阅读
+根据文件顺序阅读相关功能
 
 ![etcd Logo](logos/etcd-horizontal-color.svg)
 
@@ -31,3 +32,14 @@
 - [db_compact](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/mvcc/kvstore_compaction.go)
 - [finishedCompact-scheduledCompact](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/mvcc/store.go)
 - [kvstore](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/mvcc/kvstore.go)
+### mvcc watcher
+watcher功能的实现
+- [pkg/adt-interval_tree](https://github.com/SimFG/etcd-doc/blob/simfg-doc/pkg/adt/interbal_tree.go)
+- [watcher_group](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/mvcc/watcher_group.go)
+- [watcher](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/mvcc/watcher.go)
+- [watcher_store](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/mvcc/watchable_store.go)
+- [watcher_store_txn](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/mvcc/watchable_store_txn.go)
+
+## 已合入MR
+阅读过程中，如果发现问题，可以etcd仓库提mr合入
+- [mvcc: improve the use of locks in index.go](https://github.com/etcd-io/etcd/pull/14084)
