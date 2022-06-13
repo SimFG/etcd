@@ -30,6 +30,9 @@ import (
 
 // ReadWALVersion reads remaining entries from opened WAL and returns struct
 // that implements schema.WAL interface.
+/***
+读取wal中的所有entity
+*/
 func ReadWALVersion(w *WAL) (*walVersion, error) {
 	_, _, ents, err := w.ReadAll()
 	if err != nil {
@@ -43,6 +46,9 @@ type walVersion struct {
 }
 
 // MinimalEtcdVersion returns minimal etcd able to interpret entries from  WAL log,
+/***
+获取ectd能拦截的最小版本
+*/
 func (w *walVersion) MinimalEtcdVersion() *semver.Version {
 	return MinimalEtcdVersion(w.entries)
 }
@@ -50,6 +56,9 @@ func (w *walVersion) MinimalEtcdVersion() *semver.Version {
 // MinimalEtcdVersion returns minimal etcd able to interpret entries from  WAL log,
 // determined by looking at entries since the last snapshot and returning the highest
 // etcd version annotation from used messages, fields, enums and their values.
+/***
+获取wal的最大版本
+*/
 func MinimalEtcdVersion(ents []raftpb.Entry) *semver.Version {
 	var maxVer *semver.Version
 	for _, ent := range ents {
@@ -69,6 +78,9 @@ type Visitor func(path protoreflect.FullName, ver *semver.Version) error
 // VisitFileDescriptor calls visitor on each field and enum value with etcd version read from proto definition.
 // If field/enum value is not annotated, visitor will be called with nil.
 // Upon encountering invalid annotation, will immediately exit with error.
+/***
+访问proto中注解的元信息
+*/
 func VisitFileDescriptor(file protoreflect.FileDescriptor, visitor Visitor) error {
 	msgs := file.Messages()
 	for i := 0; i < msgs.Len(); i++ {

@@ -27,6 +27,18 @@ import (
 
 // Repair tries to repair ErrUnexpectedEOF in the
 // last wal file by truncating.
+/*** 修复 因为截断导致ErrUnexpectedEOF错误的 最后一个wal文件，返回true表示修复成功，false表示失败
+- 获取最后一个wal文件
+- 获取decoder
+- 不断的读取wal文件内容至Record对象中
+- 如果成功内容到Record对象中，通过cyc校验数据
+- 如果是EOF，表示已经读取到文件末尾，直接返回true
+- 如果获得异常，则
+	- 创建一个新文件
+	- 复制当前文件到新文件中
+	- 对新文件进行截断（Truncate），其中文件有效位置则是lastOffset
+	- 刷新文件
+*/
 func Repair(lg *zap.Logger, dirpath string) bool {
 	if lg == nil {
 		lg = zap.NewNop()
@@ -105,6 +117,9 @@ func Repair(lg *zap.Logger, dirpath string) bool {
 }
 
 // openLast opens the last wal file for read and write.
+/***
+读取最后一个wal的文件，用于读和写
+*/
 func openLast(lg *zap.Logger, dirpath string) (*fileutil.LockedFile, error) {
 	names, err := readWALNames(lg, dirpath)
 	if err != nil {

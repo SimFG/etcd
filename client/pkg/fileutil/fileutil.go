@@ -66,6 +66,9 @@ func TouchDirAll(lg *zap.Logger, dir string) error {
 
 // CreateDirAll is similar to TouchDirAll but returns error
 // if the deepest directory was not empty.
+/***
+递归创建文件夹，类似于mkdir -p
+*/
 func CreateDirAll(lg *zap.Logger, dir string) error {
 	err := TouchDirAll(lg, dir)
 	if err == nil {

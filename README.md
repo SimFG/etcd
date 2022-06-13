@@ -39,6 +39,20 @@ watcher功能的实现
 - [watcher](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/mvcc/watcher.go)
 - [watcher_store](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/mvcc/watchable_store.go)
 - [watcher_store_txn](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/mvcc/watchable_store_txn.go)
+### WAL
+推荐文章
+
+- [wal介绍](https://www.codedump.info/post/20210628-etcd-wal/)
+
+实现一致性的重要手段之一
+- [doc](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/wal/doc.go)
+- [decoder-写数据](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/wal/decoder.go)
+- [encoder-读数据](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/wal/encoder.go)
+- [file-pipeline](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/wal/file_pipeline.go)
+- [repair](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/wal/repair.go)
+- [util](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/wal/util.go)
+- [wal](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/wal/wal.go)
+- [version](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/wal/version.go)
 
 ## 已合入MR
 阅读过程中，如果发现问题，可以etcd仓库提mr合入

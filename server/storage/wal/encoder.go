@@ -16,6 +16,7 @@ package wal
 
 import (
 	"encoding/binary"
+	"go.etcd.io/etcd/server/v3/storage/wal/walpb"
 	"hash"
 	"io"
 	"os"
@@ -23,7 +24,6 @@ import (
 
 	"go.etcd.io/etcd/pkg/v3/crc"
 	"go.etcd.io/etcd/pkg/v3/ioutil"
-	"go.etcd.io/etcd/server/v3/storage/wal/walpb"
 )
 
 // walPageBytes is the alignment for flushing records to the backing Writer.
@@ -59,6 +59,12 @@ func newFileEncoder(f *os.File, prevCrc uint32) (*encoder, error) {
 	return newEncoder(f, prevCrc, int(offset)), nil
 }
 
+/***
+- 写入数据长度，更新校验和
+- 获取数据data
+- 解析数据的长度位置信息
+- 数据写入
+*/
 func (e *encoder) encode(rec *walpb.Record) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -97,9 +103,14 @@ func (e *encoder) encode(rec *walpb.Record) error {
 	return err
 }
 
+/***
+解析其中的数据长度和偏移
+TODO simfg 这部分和decoder中的有什么区别
+*/
 func encodeFrameSize(dataBytes int) (lenField uint64, padBytes int) {
 	lenField = uint64(dataBytes)
 	// force 8 byte alignment so length never gets a torn write
+	// TODO simfg pr 求余后，然后被8减，获得的值就是在8以内，最后一个应该不用求余
 	padBytes = (8 - (dataBytes % 8)) % 8
 	if padBytes != 0 {
 		lenField |= uint64(0x80|padBytes) << 56
@@ -107,6 +118,9 @@ func encodeFrameSize(dataBytes int) (lenField uint64, padBytes int) {
 	return lenField, padBytes
 }
 
+/***
+将buffer内容写入文件中
+*/
 func (e *encoder) flush() error {
 	e.mu.Lock()
 	n, err := e.bw.FlushN()
@@ -115,6 +129,9 @@ func (e *encoder) flush() error {
 	return err
 }
 
+/***
+将buf内容写入writer中
+*/
 func writeUint64(w io.Writer, n uint64, buf []byte) error {
 	// http://golang.org/src/encoding/binary/binary.go
 	binary.LittleEndian.PutUint64(buf, n)

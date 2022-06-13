@@ -4,6 +4,7 @@
 
 // Package crc provides utility function for cyclic redundancy check
 // algorithms.
+// 循环冗余校验算法
 package crc
 
 import (

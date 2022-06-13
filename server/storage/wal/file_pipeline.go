@@ -59,6 +59,9 @@ func newFilePipeline(lg *zap.Logger, dir string, fileSize int64) *filePipeline {
 // Open returns a fresh file for writing. Rename the file before calling
 // Open again or there will be file collisions.
 // it will 'block' if the tmp file lock is already taken.
+/***
+获取异步创建的文件
+*/
 func (fp *filePipeline) Open() (f *fileutil.LockedFile, err error) {
 	select {
 	case f = <-fp.filec:
@@ -67,11 +70,19 @@ func (fp *filePipeline) Open() (f *fileutil.LockedFile, err error) {
 	return f, err
 }
 
+/***
+关闭pipeline
+*/
 func (fp *filePipeline) Close() error {
 	close(fp.donec)
 	return <-fp.errc
 }
 
+/*** 给文件预分配空间大小
+- 创建文件名称，求余2是保证与上一次发布的文件不一致
+- 创建文件
+- 分配空间大小
+*/
 func (fp *filePipeline) alloc() (f *fileutil.LockedFile, err error) {
 	// count % 2 so this file isn't the same as the one last published
 	fpath := filepath.Join(fp.dir, fmt.Sprintf("%d.tmp", fp.count%2))
@@ -87,6 +98,9 @@ func (fp *filePipeline) alloc() (f *fileutil.LockedFile, err error) {
 	return f, nil
 }
 
+/***
+循环创建文件，这里是用了chan，也就是创建一个，然后堵塞到有人接收后才会创建下一个
+*/
 func (fp *filePipeline) run() {
 	defer close(fp.errc)
 	for {

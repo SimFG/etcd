@@ -27,6 +27,7 @@ import (
 // may not write it to the persistent media for quite sometime and it may be
 // written in out-of-order sequence. Using F_FULLFSYNC ensures that the
 // physical drive's buffer will also get flushed to the media.
+// HFS/OSX 上的 Fsync 将数据刷新到物理驱动器，但驱动器可能在相当长的一段时间内不会将其写入持久媒体，并且可能会以乱序顺序写入。 使用 F_FULLFSYNC 可确保物理驱动器的缓冲区也将刷新到媒体。
 func Fsync(f *os.File) error {
 	_, err := unix.FcntlInt(f.Fd(), unix.F_FULLFSYNC, 0)
 	return err

@@ -69,6 +69,12 @@ var (
 // A newly created WAL is in append mode, and ready for appending records.
 // A just opened WAL is in read mode, and ready for reading records.
 // The WAL will be ready for appending after reading out all the previous records.
+/***
+WAL是可靠存储的逻辑表示
+WAL要么处于读取模式，要么处于追加模式，但不能同时处于两者。
+新创建的WAL是追加模式，打开WAL是读取模式
+在读取所有先前的记录后，WAL 将准备好追加。
+*/
 type WAL struct {
 	lg *zap.Logger
 
@@ -97,6 +103,16 @@ type WAL struct {
 // Create creates a WAL ready for appending records. The given metadata is
 // recorded at the head of each WAL file, and can be retrieved with ReadAll
 // after the file is Open.
+/*** 创建一个WAL对象，metadata会被记录在WAL文件的开头
+- 判断文件夹下是否有WAL文件，有则直接报错
+- 获取tmp文件夹，如果存在，移除临时文件夹的所有文件
+- 创建tmp文件夹
+- 在文件夹下创建wal文件
+- 给文件预分配大小
+- 向文件中写入内容，包括了crc、metadata、snapshot
+- 将临时文件重新命名为设定的文件名
+- 刷新数据，确保数据真正被写到磁盘中
+*/
 func Create(lg *zap.Logger, dirpath string, metadata []byte) (*WAL, error) {
 	if Exist(dirpath) {
 		return nil, os.ErrExist
@@ -233,6 +249,9 @@ func Create(lg *zap.Logger, dirpath string, metadata []byte) (*WAL, error) {
 	return w, nil
 }
 
+/***
+重新打开WAL
+*/
 func (w *WAL) Reopen(lg *zap.Logger, snap walpb.Snapshot) (*WAL, error) {
 	err := w.Close()
 	if err != nil {
@@ -245,6 +264,9 @@ func (w *WAL) SetUnsafeNoFsync() {
 	w.unsafeNoSync = true
 }
 
+/***
+关闭当前WAL目录，然后将目录重命名
+*/
 func (w *WAL) cleanupWAL(lg *zap.Logger) {
 	var err error
 	if err = w.Close(); err != nil {
@@ -261,6 +283,12 @@ func (w *WAL) cleanupWAL(lg *zap.Logger) {
 	}
 }
 
+/*** 将tmpdirpath目录转换为WAL目录
+- 删除当前目录下的所有文件
+- 将tmpdirpath命名为当前目录文件夹名称
+- 更新WAL的文件属性
+-  TODO simfg renameWALUnlock什么含义
+*/
 func (w *WAL) renameWAL(tmpdirpath string) (*WAL, error) {
 	if err := os.RemoveAll(w.dir); err != nil {
 		return nil, err
@@ -283,6 +311,9 @@ func (w *WAL) renameWAL(tmpdirpath string) (*WAL, error) {
 	return w, err
 }
 
+/***
+没有文件锁，将tmpdirpath文件夹重命名为WAL下的文件夹
+*/
 func (w *WAL) renameWALUnlock(tmpdirpath string) (*WAL, error) {
 	// rename of directory with locked files doesn't work on windows/cifs;
 	// close the WAL to release the locks so the directory can be renamed.
@@ -315,6 +346,8 @@ func (w *WAL) renameWALUnlock(tmpdirpath string) (*WAL, error) {
 // The returned WAL is ready to read and the first record will be the one after
 // the given snap. The WAL cannot be appended to before reading out all of its
 // previous records.
+/*** 以dirpath创建一个WAL
+ */
 func Open(lg *zap.Logger, dirpath string, snap walpb.Snapshot) (*WAL, error) {
 	w, err := openAtIndex(lg, dirpath, snap, true)
 	if err != nil {
@@ -328,10 +361,18 @@ func Open(lg *zap.Logger, dirpath string, snap walpb.Snapshot) (*WAL, error) {
 
 // OpenForRead only opens the wal files for read.
 // Write on a read only wal panics.
+/***
+返回一个WAL对象，只用于读，不可以用于写
+*/
 func OpenForRead(lg *zap.Logger, dirpath string, snap walpb.Snapshot) (*WAL, error) {
 	return openAtIndex(lg, dirpath, snap, false)
 }
 
+/***
+- 获取所有的WAL名称
+- 获取所有WAL文件的Reader和File对象
+- 如果是写，则获取所有的文件名称，然后在创建filePipeline
+*/
 func openAtIndex(lg *zap.Logger, dirpath string, snap walpb.Snapshot, write bool) (*WAL, error) {
 	if lg == nil {
 		lg = zap.NewNop()
@@ -370,6 +411,9 @@ func openAtIndex(lg *zap.Logger, dirpath string, snap walpb.Snapshot, write bool
 	return w, nil
 }
 
+/*** 返回dirpath目录下的所有wal文件，第二个返回值是返回小于snap.Index的最大序列号
+
+ */
 func selectWALFiles(lg *zap.Logger, dirpath string, snap walpb.Snapshot) ([]string, int, error) {
 	names, err := readWALNames(lg, dirpath)
 	if err != nil {
@@ -385,7 +429,10 @@ func selectWALFiles(lg *zap.Logger, dirpath string, snap walpb.Snapshot) ([]stri
 	return names, nameIndex, nil
 }
 
-func openWALFiles(lg *zap.Logger, dirpath string, names []string, nameIndex int, write bool) ([]fileutil.FileReader, []*fileutil.LockedFile, func() error, error) {
+/***
+打开WAL目录下的所有文件，并将File对象和Reader对象写入到返回结果红
+*/
+func openWALFiles(lg *zap.Logger, dirpath string, names []string, nameIndex int, write bool) ([]io.Reader, []*fileutil.LockedFile, func() error, error) {
 	rcs := make([]io.ReadCloser, 0)
 	rs := make([]fileutil.FileReader, 0)
 	ls := make([]*fileutil.LockedFile, 0)
@@ -437,6 +484,23 @@ func openWALFiles(lg *zap.Logger, dirpath string, names []string, nameIndex int,
 //
 // ReadAll may return uncommitted yet entries, that are subject to be overriden.
 // Do not apply entries that have index > state.commit, as they are subject to change.
+/***
+ReadAll 读取当前WAL中所有的records
+如果是写模式，必须将所有的record进行读取或者直到一个error出现
+如果是读模式，将尽可能的读取所有record
+
+如果没有读取到预期的snap，抛出ErrSnapshotNotFound
+如果加载的snap与预期的snap不匹配，返回所有record和一个error ErrSnapshotMismatch
+
+在ReadAll之后，这个WAL将准备添加record
+
+- decoder数据 TODO simfg 为什么要for要decode两次
+- 读取tail文件
+- 执行readClose函数
+- 根据场景创建encoder
+
+Tips：encoder用于往wal中写，decoder用于从wal中读
+*/
 func (w *WAL) ReadAll() (metadata []byte, state raftpb.HardState, ents []raftpb.Entry, err error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -560,6 +624,10 @@ func (w *WAL) ReadAll() (metadata []byte, state raftpb.HardState, ents []raftpb.
 
 // ValidSnapshotEntries returns all the valid snapshot entries in the wal logs in the given directory.
 // Snapshot entries are valid if their index is less than or equal to the most recent committed hardstate.
+/***
+返回walDir目录下所有有效的snap
+如果snap的索引小于等于最近提交的hardstate，则Snapshot是有效的
+*/
 func ValidSnapshotEntries(lg *zap.Logger, walDir string) ([]walpb.Snapshot, error) {
 	var snaps []walpb.Snapshot
 	var state raftpb.HardState
@@ -618,6 +686,13 @@ func ValidSnapshotEntries(lg *zap.Logger, walDir string) ([]walpb.Snapshot, erro
 			n++
 		}
 	}
+	// s = s[low : high : max] 切片的三个参数的切片截取的意义为
+	// low 为截取的起始下标（含），
+	// high 为窃取的结束下标（不含 high），
+	// max 为切片保留的原切片的最大下标（不含 max）；
+	// 即新切片从老切片的 low 下标元素开始，len = high - low, cap = max - low；
+	// high 和 max 一旦超出在老切片中越界，就会发生 runtime err，slice out of range。
+	// 另外如果省略第三个参数的时候，第三个参数默认和第二个参数相同，即 len = cap。
 	snaps = snaps[:n:n]
 	return snaps, nil
 }
@@ -629,6 +704,12 @@ func ValidSnapshotEntries(lg *zap.Logger, walDir string) ([]walpb.Snapshot, erro
 // If it cannot read out the expected snap, it will return ErrSnapshotNotFound.
 // If the loaded snap doesn't match with the expected one, it will
 // return error ErrSnapshotMismatch.
+/*** 校验WAL是否有错误
+创建一个新的decoder去读取WAL中的record
+虽然这与任何一个打开的WAL不冲突，但是在打开一个WAL去写的时候，不能调用这个函数
+如果没有读取到预期的snap，返回ErrSnapshotNotFound
+如果读取到的与预期的不一致，返回ErrSnapshotMismatch
+*/
 func Verify(lg *zap.Logger, walDir string, snap walpb.Snapshot) (*raftpb.HardState, error) {
 	var metadata []byte
 	var err error
@@ -710,6 +791,14 @@ func Verify(lg *zap.Logger, walDir string, snap walpb.Snapshot) (*raftpb.HardSta
 // cut closes current file written and creates a new one ready to append.
 // cut first creates a temp wal file and writes necessary headers into it.
 // Then cut atomically rename temp wal file to a wal file.
+/*** 关闭当前正在写的文件，创建一个新的文件准备添加。首先创建一个临时的wal文件，并写入必要的头信息，然后将临时文件重命名
+- 获取tail文件的当前位置
+- 截取tail文件，当前位置的后面内容全部截取
+- 创建一个新的wal文件
+- 写入必要的头信息，如crc、metadata、state
+- 重命名文件
+- 更新locks数组
+*/
 func (w *WAL) cut() error {
 	// close old wal file; truncate to avoid wasting space if an early cut
 	off, serr := w.tail().Seek(0, io.SeekCurrent)
@@ -794,6 +883,9 @@ func (w *WAL) cut() error {
 	return nil
 }
 
+/***
+同步数据，将数据写入物理设备
+*/
 func (w *WAL) sync() error {
 	if w.encoder != nil {
 		if err := w.encoder.flush(); err != nil {
@@ -829,6 +921,11 @@ func (w *WAL) Sync() error {
 // except the largest one among them.
 // For example, if WAL is holding lock 1,2,3,4,5,6, ReleaseLockTo(4) will release
 // lock 1,2 but keep 3. ReleaseLockTo(5) will release 1,2,3 but keep 4.
+/*** 释放文件锁，根据输入index，找到大于等于index的文件序号i，
+释放locks文件数组中需要小于i-1的文件锁
+也就是说，假如根据输入index，找到第一个大于等于index的文件为第三个，那么释放锁的文件是0、1，因为3-1=2，然后释放锁的文件需要要小于2，
+所以释放文件锁的文件序号为为0和1
+*/
 func (w *WAL) ReleaseLockTo(index uint64) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -873,6 +970,9 @@ func (w *WAL) ReleaseLockTo(index uint64) error {
 }
 
 // Close closes the current WAL file and directory.
+/***
+关闭当前的WAL文件和目录
+*/
 func (w *WAL) Close() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -899,6 +999,9 @@ func (w *WAL) Close() error {
 	return w.dirFile.Close()
 }
 
+/***
+写入数据entry
+*/
 func (w *WAL) saveEntry(e *raftpb.Entry) error {
 	// TODO: add MustMarshalTo to reduce one allocation.
 	b := pbutil.MustMarshal(e)
@@ -910,6 +1013,9 @@ func (w *WAL) saveEntry(e *raftpb.Entry) error {
 	return nil
 }
 
+/***
+写入状态state
+*/
 func (w *WAL) saveState(s *raftpb.HardState) error {
 	if raft.IsEmptyHardState(*s) {
 		return nil
@@ -920,6 +1026,9 @@ func (w *WAL) saveState(s *raftpb.HardState) error {
 	return w.encoder.encode(rec)
 }
 
+/***
+保存state和entry
+*/
 func (w *WAL) Save(st raftpb.HardState, ents []raftpb.Entry) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -955,6 +1064,9 @@ func (w *WAL) Save(st raftpb.HardState, ents []raftpb.Entry) error {
 	return w.cut()
 }
 
+/***
+保存snap
+*/
 func (w *WAL) SaveSnapshot(e walpb.Snapshot) error {
 	if err := walpb.ValidateSnapshotForWrite(&e); err != nil {
 		return err
@@ -976,10 +1088,17 @@ func (w *WAL) SaveSnapshot(e walpb.Snapshot) error {
 	return w.sync()
 }
 
+/***
+保存crc
+*/
 func (w *WAL) saveCrc(prevCrc uint32) error {
 	return w.encoder.encode(&walpb.Record{Type: crcType, Crc: prevCrc})
 }
 
+/***
+获取locks的最后一个文件
+TODO simfg 有什么含义
+*/
 func (w *WAL) tail() *fileutil.LockedFile {
 	if len(w.locks) > 0 {
 		return w.locks[len(w.locks)-1]
@@ -987,6 +1106,9 @@ func (w *WAL) tail() *fileutil.LockedFile {
 	return nil
 }
 
+/***
+获取wal文件的seq
+*/
 func (w *WAL) seq() uint64 {
 	t := w.tail()
 	if t == nil {

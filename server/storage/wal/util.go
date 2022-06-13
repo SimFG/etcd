@@ -27,6 +27,9 @@ import (
 var errBadWALName = errors.New("bad wal name")
 
 // Exist returns true if there are any files in a given directory.
+/***
+当前文件夹是否有wal文件
+*/
 func Exist(dir string) bool {
 	names, err := fileutil.ReadDir(dir, fileutil.WithExt(".wal"))
 	if err != nil {
@@ -38,6 +41,9 @@ func Exist(dir string) bool {
 // searchIndex returns the last array index of names whose raft index section is
 // equal to or smaller than the given index.
 // The given names MUST be sorted.
+/*** 获取names中index小于等于输入index的序号
+参数：names必须是升序的
+*/
 func searchIndex(lg *zap.Logger, names []string, index uint64) (int, bool) {
 	for i := len(names) - 1; i >= 0; i-- {
 		name := names[i]
@@ -54,6 +60,9 @@ func searchIndex(lg *zap.Logger, names []string, index uint64) (int, bool) {
 
 // names should have been sorted based on sequence number.
 // isValidSeq checks whether seq increases continuously.
+/***
+校验names中Seq序号值是不是逐一递增的
+*/
 func isValidSeq(lg *zap.Logger, names []string) bool {
 	var lastSeq uint64
 	for _, name := range names {
@@ -69,6 +78,9 @@ func isValidSeq(lg *zap.Logger, names []string) bool {
 	return true
 }
 
+/***
+获取当前目录下的所有wal文件名称
+*/
 func readWALNames(lg *zap.Logger, dirpath string) ([]string, error) {
 	names, err := fileutil.ReadDir(dirpath)
 	if err != nil {
@@ -81,6 +93,9 @@ func readWALNames(lg *zap.Logger, dirpath string) ([]string, error) {
 	return wnames, nil
 }
 
+/***
+获取输入names中有效的wal文件名称
+*/
 func checkWalNames(lg *zap.Logger, names []string) []string {
 	wnames := make([]string, 0)
 	for _, name := range names {
@@ -99,6 +114,9 @@ func checkWalNames(lg *zap.Logger, names []string) []string {
 	return wnames
 }
 
+/***
+通过wal文件名提取seq和index的序号信息
+*/
 func parseWALName(str string) (seq, index uint64, err error) {
 	if !strings.HasSuffix(str, ".wal") {
 		return 0, 0, errBadWALName
@@ -107,6 +125,9 @@ func parseWALName(str string) (seq, index uint64, err error) {
 	return seq, index, err
 }
 
+/***
+得到一个wal文件名称
+*/
 func walName(seq, index uint64) string {
 	return fmt.Sprintf("%016x-%016x.wal", seq, index)
 }

@@ -60,6 +60,14 @@ func (d *decoder) decode(rec *walpb.Record) error {
 	return d.decodeRecord(rec)
 }
 
+/***
+从decoder的reader列表中读取数据到输入参数record中
+- 从reader列表中第一个获取数据长度位置信息，如果失败，从下一个reader在进行尝试
+- 获取数据大小和偏移
+- 根据数据长度位置信息，从reader读取数据
+- 解析成record
+- 如果不是cyc类型数据，则进行数据校验
+*/
 func (d *decoder) decodeRecord(rec *walpb.Record) error {
 	if len(d.brs) == 0 {
 		return io.EOF
@@ -119,6 +127,9 @@ func (d *decoder) decodeRecord(rec *walpb.Record) error {
 	return nil
 }
 
+/***
+获取int64中端数据大小（低56位）和数据偏移（低56位前三位）
+*/
 func decodeFrameSize(lenField int64) (recBytes int64, padBytes int64) {
 	// the record size is stored in the lower 56 bits of the 64-bit length
 	recBytes = int64(uint64(lenField) & ^(uint64(0xff) << 56))
@@ -132,6 +143,11 @@ func decodeFrameSize(lenField int64) (recBytes int64, padBytes int64) {
 
 // isTornEntry determines whether the last entry of the WAL was partially written
 // and corrupted because of a torn write.
+/***
+数据是否损坏
+- 将获得数据，分成多个chunk，放入chunks
+- 遍历chunks，如果存在一个chunk全部是0，则数据被损坏
+*/
 func (d *decoder) isTornEntry(data []byte) bool {
 	if len(d.brs) != 1 {
 		return false
@@ -167,28 +183,47 @@ func (d *decoder) isTornEntry(data []byte) bool {
 	return false
 }
 
+/***
+更新数据crc（数据校验和）
+*/
 func (d *decoder) updateCRC(prevCrc uint32) {
 	d.crc = crc.New(prevCrc, crcTable)
 }
 
+/***
+获取数据校验和
+*/
 func (d *decoder) lastCRC() uint32 {
 	return d.crc.Sum32()
 }
 
+/***
+当前数据偏移
+*/
 func (d *decoder) lastOffset() int64 { return d.lastValidOff }
 
+/***
+将byte转换为raftpb.Entry
+*/
 func mustUnmarshalEntry(d []byte) raftpb.Entry {
 	var e raftpb.Entry
 	pbutil.MustUnmarshal(&e, d)
 	return e
 }
 
+/***
+将byte转换为raftpb.HardState
+*/
 func mustUnmarshalState(d []byte) raftpb.HardState {
 	var s raftpb.HardState
 	pbutil.MustUnmarshal(&s, d)
 	return s
 }
 
+/*** 从r中读取int数值
+binary包：https://www.jianshu.com/p/ec461b39bf43
+大端序与小端序 https://zhuanlan.zhihu.com/p/352145413
+*/
 func readInt64(r io.Reader) (int64, error) {
 	var n int64
 	err := binary.Read(r, binary.LittleEndian, &n)
