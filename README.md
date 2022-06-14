@@ -54,6 +54,8 @@ watcher功能的实现
 - [wal](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/wal/wal.go)
 - [version](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/wal/version.go)
 
-## 已合入MR
+## MR列表
 阅读过程中，如果发现问题，可以etcd仓库提mr合入
 - [mvcc: improve the use of locks in index.go](https://github.com/etcd-io/etcd/pull/14084)
+- [wal: remove the repeated test case](https://github.com/etcd-io/etcd/pull/14106)
+- [schedule: support to recover from job panic for the fifo](https://github.com/etcd-io/etcd/pull/14109)
