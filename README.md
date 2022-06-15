@@ -43,6 +43,7 @@ watcher功能的实现
 推荐文章
 
 - [wal介绍](https://www.codedump.info/post/20210628-etcd-wal/)
+- [wal关键流程分析](https://zhuanlan.zhihu.com/p/380378857)
 
 实现一致性的重要手段之一
 - [doc](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/wal/doc.go)
