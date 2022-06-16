@@ -54,6 +54,21 @@ watcher功能的实现
 - [util](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/wal/util.go)
 - [wal](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/wal/wal.go)
 - [version](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/wal/version.go)
+### Schema
+主要是提供了一些操作Bucket的封装类
+- [action](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/schema/actions.go)
+- [alarm](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/schema/alarm.go)
+- [auth](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/schema/auth.go)
+- [auth_roles](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/schema/auth_roles.go)
+- [auth-users](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/schema/auth_users.go)
+- [changes](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/schema/changes.go)
+- [cindex](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/schema/cindex.go)
+- [confstate](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/schema/confstate.go)
+- [lease](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/schema/lease.go)
+- [membership](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/schema/membership.go)
+- [migration](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/schema/migration.go)
+- [schema](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/schema/schema.go)
+- [version](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/schema/version.go)
 
 ## MR列表
 阅读过程中，如果发现问题，可以etcd仓库提mr合入
