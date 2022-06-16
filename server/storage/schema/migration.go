@@ -25,6 +25,12 @@ import (
 
 type migrationPlan []migrationStep
 
+/***
+获取迁移migrationPlan
+- 获取Version副本
+- 确认Major是否相等，也就是大版本必须相等
+- 递增升级，每一次都只升级一个小版本，生成对应的migrationStep，然后将其添加到migrationPlan
+*/
 func newPlan(lg *zap.Logger, current semver.Version, target semver.Version) (plan migrationPlan, err error) {
 	current = trimToMinor(current)
 	target = trimToMinor(target)
@@ -72,6 +78,9 @@ type migrationStep struct {
 	actions ActionList
 }
 
+/***
+生成migrationStep，每次都是添加或者删除字段
+*/
 func newMigrationStep(v semver.Version, isUpgrade bool, changes []schemaChange) (step migrationStep) {
 	step.actions = make(ActionList, len(changes))
 	for i, change := range changes {

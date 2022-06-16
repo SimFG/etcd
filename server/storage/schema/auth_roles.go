@@ -24,6 +24,9 @@ func UnsafeCreateAuthRolesBucket(tx backend.BatchTx) {
 	tx.UnsafeCreateBucket(AuthRoles)
 }
 
+/***
+Role操作相关，包含了GetRole、GetAllRoles、PutRole、DeleteRole
+*/
 func (abe *authBackend) GetRole(roleName string) *authpb.Role {
 	tx := abe.BatchTx()
 	tx.Lock()
@@ -79,6 +82,11 @@ func (atx *authReadTx) UnsafeGetRole(roleName string) *authpb.Role {
 	return role
 }
 
+/***
+获取所有的Role
+start:[]byte{0},
+end: []byte{0xff},
+*/
 func (atx *authReadTx) UnsafeGetAllRoles() []*authpb.Role {
 	_, vs := atx.tx.UnsafeRange(AuthRoles, []byte{0}, []byte{0xff}, -1)
 	if len(vs) == 0 {

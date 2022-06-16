@@ -19,6 +19,9 @@ import (
 	"go.uber.org/zap"
 )
 
+/***
+User相关，包括了GetUser、GetAllUsers、PutUser、DeleteUser
+*/
 func (abe *authBackend) GetUser(username string) *authpb.User {
 	tx := abe.BatchTx()
 	tx.Lock()

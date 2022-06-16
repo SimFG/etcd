@@ -22,15 +22,24 @@ import (
 type action interface {
 	// unsafeDo executes the action and returns revert action, when executed
 	// should restore the state from before.
+	/*** 执行action，返回一个回退action，如果返回结果被执行，将恢复到这个函数没有执行前的状态的
+	 */
 	unsafeDo(tx backend.BatchTx) (revert action, err error)
 }
 
+/***
+给value设置一个值，包含了如果key之前不存在，则是添加，否则就是更改
+*/
 type setKeyAction struct {
 	Bucket     backend.Bucket
 	FieldName  []byte
 	FieldValue []byte
 }
 
+/*** 执行SetKeyAction
+- 得到一个revert的Action
+- 执行put操作
+*/
 func (a setKeyAction) unsafeDo(tx backend.BatchTx) (action, error) {
 	revert := restoreFieldValueAction(tx, a.Bucket, a.FieldName)
 	tx.UnsafePut(a.Bucket, a.FieldName, a.FieldValue)
@@ -42,12 +51,20 @@ type deleteKeyAction struct {
 	FieldName []byte
 }
 
+/*** 执行delete操作
+- 获取revert Action
+- 执行delete
+*/
 func (a deleteKeyAction) unsafeDo(tx backend.BatchTx) (action, error) {
 	revert := restoreFieldValueAction(tx, a.Bucket, a.FieldName)
 	tx.UnsafeDelete(a.Bucket, a.FieldName)
 	return revert, nil
 }
 
+/***
+- 如果在执行前可以查询到值，说明之前存在值，所以revert的Action就是将key对应的value更新到之前的值
+- 否则的话，就是添加key，那么复原的时候对应的就是delete操作
+*/
 func restoreFieldValueAction(tx backend.BatchTx, bucket backend.Bucket, fieldName []byte) action {
 	_, vs := tx.UnsafeRange(bucket, fieldName, nil, 1)
 	if len(vs) == 1 {
@@ -67,6 +84,8 @@ type ActionList []action
 
 // unsafeExecute executes actions one by one. If one of actions returns error,
 // it will revert them.
+/*** 执行Action列表，如果其中一个失败，将会回退他们
+ */
 func (as ActionList) unsafeExecute(lg *zap.Logger, tx backend.BatchTx) error {
 	var revertActions = make(ActionList, 0, len(as))
 	for _, a := range as {

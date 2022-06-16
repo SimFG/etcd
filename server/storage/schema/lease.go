@@ -22,6 +22,9 @@ import (
 	"go.etcd.io/etcd/server/v3/storage/backend"
 )
 
+/***
+Lease相关，如GetAllLeases、PutLease、DeleteLease、GetLease
+*/
 func UnsafeCreateLeaseBucket(tx backend.BatchTx) {
 	tx.UnsafeCreateBucket(Lease)
 }

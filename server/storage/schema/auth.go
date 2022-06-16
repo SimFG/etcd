@@ -38,6 +38,7 @@ type authBackend struct {
 	lg *zap.Logger
 }
 
+// 神奇的用法，这个其实是用于保证authBackend实现接口AuthBackend
 var _ auth.AuthBackend = (*authBackend)(nil)
 
 func NewAuthBackend(lg *zap.Logger, be backend.Backend) *authBackend {
@@ -47,6 +48,10 @@ func NewAuthBackend(lg *zap.Logger, be backend.Backend) *authBackend {
 	}
 }
 
+/***
+创建权限相关的Bucket
+包括了Auth、AuthUsers、AuthRoles
+*/
 func (abe *authBackend) CreateAuthBuckets() {
 	tx := abe.be.BatchTx()
 	tx.LockOutsideApply()

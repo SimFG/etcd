@@ -30,6 +30,9 @@ func ReadStorageVersion(tx backend.ReadTx) *semver.Version {
 
 // UnsafeReadStorageVersion loads storage version from given backend transaction.
 // Populated since v3.6
+/***
+获取MetaStorageVersion版本
+*/
 func UnsafeReadStorageVersion(tx backend.ReadTx) *semver.Version {
 	_, vs := tx.UnsafeRange(Meta, MetaStorageVersionName, nil, 1)
 	if len(vs) == 0 {
@@ -55,12 +58,18 @@ func ReadStorageVersionFromSnapshot(tx *bbolt.Tx) *semver.Version {
 
 // UnsafeSetStorageVersion updates etcd storage version in backend.
 // Populated since v3.6
+/***
+更新MetaStorageVersion信息
+*/
 func UnsafeSetStorageVersion(tx backend.BatchTx, v *semver.Version) {
 	sv := semver.Version{Major: v.Major, Minor: v.Minor}
 	tx.UnsafePut(Meta, MetaStorageVersionName, []byte(sv.String()))
 }
 
 // UnsafeClearStorageVersion removes etcd storage version in backend.
+/***
+删除MetaStorageVersion信息
+*/
 func UnsafeClearStorageVersion(tx backend.BatchTx) {
 	tx.UnsafeDelete(Meta, MetaStorageVersionName)
 }

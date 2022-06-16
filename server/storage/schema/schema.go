@@ -31,6 +31,9 @@ func Validate(lg *zap.Logger, tx backend.ReadTx) error {
 	return unsafeValidate(lg, tx)
 }
 
+/***
+查看是否可以正确获得migrationPlan
+*/
 func unsafeValidate(lg *zap.Logger, tx backend.ReadTx) error {
 	current, err := UnsafeDetectSchemaVersion(lg, tx)
 	if err != nil {
@@ -42,6 +45,9 @@ func unsafeValidate(lg *zap.Logger, tx backend.ReadTx) error {
 	return err
 }
 
+/***
+获取当前版本
+*/
 func localBinaryVersion() semver.Version {
 	v := semver.New(version.Version)
 	return semver.Version{Major: v.Major, Minor: v.Minor}
@@ -61,6 +67,9 @@ func Migrate(lg *zap.Logger, tx backend.BatchTx, w WALVersion, target semver.Ver
 }
 
 // UnsafeMigrate is non thread-safe version of Migrate.
+/***
+版本迁移
+*/
 func UnsafeMigrate(lg *zap.Logger, tx backend.BatchTx, w WALVersion, target semver.Version) error {
 	current, err := UnsafeDetectSchemaVersion(lg, tx)
 	if err != nil {
@@ -90,6 +99,9 @@ func DetectSchemaVersion(lg *zap.Logger, tx backend.ReadTx) (v semver.Version, e
 }
 
 // UnsafeDetectSchemaVersion non-threadsafe version of DetectSchemaVersion.
+/***
+TODO simfg 为什么这里固定返回V3_5
+*/
 func UnsafeDetectSchemaVersion(lg *zap.Logger, tx backend.ReadTx) (v semver.Version, err error) {
 	vp := UnsafeReadStorageVersion(tx)
 	if vp != nil {
@@ -106,6 +118,9 @@ func UnsafeDetectSchemaVersion(lg *zap.Logger, tx backend.ReadTx) (v semver.Vers
 	return version.V3_5, nil
 }
 
+/***
+获取版本迁移之间schemaChange变化列表
+*/
 func schemaChangesForVersion(v semver.Version, isUpgrade bool) ([]schemaChange, error) {
 	// changes should be taken from higher version
 	var higherV = v

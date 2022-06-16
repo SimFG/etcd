@@ -22,6 +22,9 @@ type schemaChange interface {
 }
 
 // addNewField represents adding new field when upgrading. Downgrade will remove the field.
+/***
+升级的时候添加一个字段，降级的时候删除这个字段
+*/
 func addNewField(bucket backend.Bucket, fieldName []byte, fieldValue []byte) schemaChange {
 	return simpleSchemaChange{
 		upgrade: setKeyAction{

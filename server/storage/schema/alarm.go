@@ -32,6 +32,9 @@ func NewAlarmBackend(lg *zap.Logger, be backend.Backend) *alarmBackend {
 	}
 }
 
+/***
+创建Alarm Bucket，用于存储Alarm
+*/
 func (s *alarmBackend) CreateAlarmBucket() {
 	tx := s.be.BatchTx()
 	tx.LockOutsideApply()
@@ -39,6 +42,8 @@ func (s *alarmBackend) CreateAlarmBucket() {
 	tx.UnsafeCreateBucket(Alarm)
 }
 
+/*** 添加Alarm
+ */
 func (s *alarmBackend) MustPutAlarm(alarm *etcdserverpb.AlarmMember) {
 	tx := s.be.BatchTx()
 	tx.LockInsideApply()
@@ -55,6 +60,8 @@ func (s *alarmBackend) mustUnsafePutAlarm(tx backend.BatchTx, alarm *etcdserverp
 	tx.UnsafePut(Alarm, v, nil)
 }
 
+/*** 删除Alarm
+ */
 func (s *alarmBackend) MustDeleteAlarm(alarm *etcdserverpb.AlarmMember) {
 	tx := s.be.BatchTx()
 	tx.LockInsideApply()
@@ -71,6 +78,8 @@ func (s *alarmBackend) mustUnsafeDeleteAlarm(tx backend.BatchTx, alarm *etcdserv
 	tx.UnsafeDelete(Alarm, v)
 }
 
+/***获取所有的Alarm
+ */
 func (s *alarmBackend) GetAllAlarms() ([]*etcdserverpb.AlarmMember, error) {
 	tx := s.be.ReadTx()
 	tx.Lock()

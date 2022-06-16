@@ -25,6 +25,9 @@ import (
 
 // MustUnsafeSaveConfStateToBackend persists confState using given transaction (tx).
 // confState in backend is persisted since etcd v3.5.
+/***
+保存ConfState到数据库
+*/
 func MustUnsafeSaveConfStateToBackend(lg *zap.Logger, tx backend.BatchTx, confState *raftpb.ConfState) {
 	confStateBytes, err := json.Marshal(confState)
 	if err != nil {
@@ -36,6 +39,9 @@ func MustUnsafeSaveConfStateToBackend(lg *zap.Logger, tx backend.BatchTx, confSt
 
 // UnsafeConfStateFromBackend retrieves ConfState from the backend.
 // Returns nil if confState in backend is not persisted (e.g. backend writen by <v3.5).
+/***
+从数据库读取ConfState
+*/
 func UnsafeConfStateFromBackend(lg *zap.Logger, tx backend.ReadTx) *raftpb.ConfState {
 	keys, vals := tx.UnsafeRange(Meta, MetaConfStateName, nil, 0)
 	if len(keys) == 0 {

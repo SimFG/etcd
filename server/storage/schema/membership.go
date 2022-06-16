@@ -44,6 +44,9 @@ func NewMembershipBackend(lg *zap.Logger, be backend.Backend) *membershipBackend
 	}
 }
 
+/***
+保存Member信息到数据库
+*/
 func (s *membershipBackend) MustSaveMemberToBackend(m *membership.Member) {
 	mkey := BackendMemberKey(m.ID)
 	mvalue, err := json.Marshal(m)
@@ -59,6 +62,9 @@ func (s *membershipBackend) MustSaveMemberToBackend(m *membership.Member) {
 
 // TrimClusterFromBackend removes all information about cluster (versions)
 // from the v3 backend.
+/***
+删除Cluster Bucket
+*/
 func (s *membershipBackend) TrimClusterFromBackend() error {
 	tx := s.be.BatchTx()
 	tx.LockOutsideApply()
@@ -67,6 +73,10 @@ func (s *membershipBackend) TrimClusterFromBackend() error {
 	return nil
 }
 
+/***
+从Members中删除某个元素
+删除的元素会放到MembersRemoved中
+*/
 func (s *membershipBackend) MustDeleteMemberFromBackend(id types.ID) {
 	mkey := BackendMemberKey(id)
 
@@ -77,6 +87,9 @@ func (s *membershipBackend) MustDeleteMemberFromBackend(id types.ID) {
 	tx.UnsafePut(MembersRemoved, mkey, []byte("removed"))
 }
 
+/***
+获取所有的member信息
+*/
 func (s *membershipBackend) MustReadMembersFromBackend() (map[types.ID]*membership.Member, map[types.ID]bool) {
 	members, removed, err := s.readMembersFromBackend()
 	if err != nil {
@@ -118,6 +131,9 @@ func (s *membershipBackend) readMembersFromBackend() (map[types.ID]*membership.M
 
 // TrimMembershipFromBackend removes all information about members &
 // removed_members from the v3 backend.
+/***
+删除所有的member信息
+*/
 func (s *membershipBackend) TrimMembershipFromBackend() error {
 	s.lg.Info("Trimming membership information from the backend...")
 	tx := s.be.BatchTx()
@@ -142,6 +158,9 @@ func (s *membershipBackend) TrimMembershipFromBackend() error {
 
 // MustSaveClusterVersionToBackend saves cluster version to backend.
 // The field is populated since etcd v3.5.
+/***
+保存version信息到数据库中
+*/
 func (s *membershipBackend) MustSaveClusterVersionToBackend(ver *semver.Version) {
 	ckey := ClusterClusterVersionKeyName
 
@@ -153,6 +172,9 @@ func (s *membershipBackend) MustSaveClusterVersionToBackend(ver *semver.Version)
 
 // MustSaveDowngradeToBackend saves downgrade info to backend.
 // The field is populated since etcd v3.5.
+/***
+保存DowngradeInfo信息到数据库中
+*/
 func (s *membershipBackend) MustSaveDowngradeToBackend(downgrade *version.DowngradeInfo) {
 	dkey := ClusterDowngradeKeyName
 	dvalue, err := json.Marshal(downgrade)
@@ -165,6 +187,9 @@ func (s *membershipBackend) MustSaveDowngradeToBackend(downgrade *version.Downgr
 	tx.UnsafePut(Cluster, dkey, dvalue)
 }
 
+/***
+创建Backend相关的bucket，包括了Members、MembersRemoved、Cluster
+*/
 func (s *membershipBackend) MustCreateBackendBuckets() {
 	tx := s.be.BatchTx()
 	tx.LockOutsideApply()
@@ -184,6 +209,9 @@ func mustParseMemberIDFromBytes(lg *zap.Logger, key []byte) types.ID {
 
 // ClusterVersionFromBackend reads cluster version from backend.
 // The field is populated since etcd v3.5.
+/***
+读取Version信息
+*/
 func (s *membershipBackend) ClusterVersionFromBackend() *semver.Version {
 	ckey := ClusterClusterVersionKeyName
 	tx := s.be.ReadTx()
@@ -204,6 +232,9 @@ func (s *membershipBackend) ClusterVersionFromBackend() *semver.Version {
 
 // DowngradeInfoFromBackend reads downgrade info from backend.
 // The field is populated since etcd v3.5.
+/***
+读取DowngradeInfo信息
+*/
 func (s *membershipBackend) DowngradeInfoFromBackend() *version.DowngradeInfo {
 	dkey := ClusterDowngradeKeyName
 	tx := s.be.ReadTx()

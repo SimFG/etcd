@@ -23,6 +23,9 @@ import (
 )
 
 // UnsafeCreateMetaBucket creates the `meta` bucket (if it does not exist yet).
+/***
+创建meta bucket
+*/
 func UnsafeCreateMetaBucket(tx backend.BatchTx) {
 	tx.UnsafeCreateBucket(Meta)
 }
@@ -37,6 +40,9 @@ func CreateMetaBucket(tx backend.BatchTx) {
 // UnsafeReadConsistentIndex loads consistent index & term from given transaction.
 // returns 0,0 if the data are not found.
 // Term is persisted since v3.5.
+/***
+获取index和term
+*/
 func UnsafeReadConsistentIndex(tx backend.ReadTx) (uint64, uint64) {
 	_, vs := tx.UnsafeRange(Meta, MetaConsistentIndexKeyName, nil, 0)
 	if len(vs) == 0 {
