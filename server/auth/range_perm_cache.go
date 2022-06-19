@@ -20,6 +20,12 @@ import (
 	"go.uber.org/zap"
 )
 
+/*** 通过AuthReadTx去获取userName的权限
+返回结果：unifiedRangePermissions，其中包括读和写两种权限，权限列表通过红黑树管理
+- 获取user
+- 生成两棵红黑树，分别为读和写
+- 遍历user对应的role，然后根据role返回权限列表
+*/
 func getMergedPerms(tx AuthReadTx, userName string) *unifiedRangePermissions {
 	user := tx.UnsafeGetUser(userName)
 	if user == nil {
@@ -69,6 +75,9 @@ func getMergedPerms(tx AuthReadTx, userName string) *unifiedRangePermissions {
 	}
 }
 
+/***
+判断unifiedRangePermissions中是否包含对于[key, rangeEnd]的permtyp权限
+*/
 func checkKeyInterval(
 	lg *zap.Logger,
 	cachedPerms *unifiedRangePermissions,
@@ -90,6 +99,9 @@ func checkKeyInterval(
 	return false
 }
 
+/***
+判断unifiedRangePermissions中是否包含对于key的permtyp权限
+*/
 func checkKeyPoint(lg *zap.Logger, cachedPerms *unifiedRangePermissions, key []byte, permtyp authpb.Permission_Type) bool {
 	pt := adt.NewBytesAffinePoint(key)
 	switch permtyp {
@@ -103,6 +115,9 @@ func checkKeyPoint(lg *zap.Logger, cachedPerms *unifiedRangePermissions, key []b
 	return false
 }
 
+/***
+判断用户是有对于[key, rangeEnd]对应的permtyp类型权限
+*/
 func (as *authStore) isRangeOpPermitted(tx AuthReadTx, userName string, key, rangeEnd []byte, permtyp authpb.Permission_Type) bool {
 	// assumption: tx is Lock()ed
 	_, ok := as.rangePermCache[userName]

@@ -51,6 +51,9 @@ type jwtOptions struct {
 }
 
 // ParseWithDefaults will load options from the specified map or set defaults where appropriate
+/***
+设置默认的ttl时间，默认为5分支
+*/
 func (opts *jwtOptions) ParseWithDefaults(optMap map[string]string) error {
 	if opts.TTL == 0 && optMap[optTTL] == "" {
 		opts.TTL = DefaultTTL
@@ -60,6 +63,10 @@ func (opts *jwtOptions) ParseWithDefaults(optMap map[string]string) error {
 }
 
 // Parse will load options from the specified map
+/***
+提取map中的jwt信息，包括了
+过期时间，公钥，私钥，签名方法
+*/
 func (opts *jwtOptions) Parse(optMap map[string]string) error {
 	var err error
 	if ttl := optMap[optTTL]; ttl != "" {
@@ -94,6 +101,9 @@ func (opts *jwtOptions) Parse(optMap map[string]string) error {
 }
 
 // Key will parse and return the appropriately typed key for the selected signature method
+/***
+根据签名方法获取对应的key
+*/
 func (opts *jwtOptions) Key() (interface{}, error) {
 	switch opts.SignMethod.(type) {
 	case *jwt.SigningMethodRSA, *jwt.SigningMethodRSAPSS:

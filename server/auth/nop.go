@@ -18,6 +18,9 @@ import (
 	"context"
 )
 
+/***
+与jwt对应，一个token空壳
+*/
 type tokenNop struct{}
 
 func (t *tokenNop) enable()                         {}

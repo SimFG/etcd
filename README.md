@@ -5,6 +5,8 @@
 
 ## 推荐阅读
 
+- [理解LSM Tree](https://mp.weixin.qq.com/s/7kdg7VQMxa4TsYqPfF8Yug)
+- [LSM Tree 实现一个KV数据库](https://www.cnblogs.com/whuanle/p/16297025.html)
 - [etcd 官方doc](https://etcd.io/docs/v3.5/)
 - [模块介绍](https://etcd.io/docs/v3.5/dev-internal/modules/)
 - [api介绍](https://www.lixueduan.com/post/etcd/03-v3-analyze/)
@@ -69,6 +71,13 @@ watcher功能的实现
 - [migration](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/schema/migration.go)
 - [schema](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/schema/schema.go)
 - [version](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/storage/schema/version.go)
+### auth
+权限校验相关
+- [jwt](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/auth/jwt.go)
+- [simple_token](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/auth/simple_token.go)
+- [nop](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/auth/nop.go)
+- [range_perm_cache](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/auth/range_perm_cache.go)
+- [store](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/auth/store.go)
 
 ## MR列表
 阅读过程中，如果发现问题，可以etcd仓库提mr合入

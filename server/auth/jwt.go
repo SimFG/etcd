@@ -25,6 +25,9 @@ import (
 	"go.uber.org/zap"
 )
 
+/***
+verifyOnly 含义：是否为公钥，仅用于验证
+*/
 type tokenJWT struct {
 	lg         *zap.Logger
 	signMethod jwt.SigningMethod
@@ -38,6 +41,12 @@ func (t *tokenJWT) disable()                        {}
 func (t *tokenJWT) invalidateUser(string)           {}
 func (t *tokenJWT) genTokenPrefix() (string, error) { return "", nil }
 
+/*** 提取token中的信息
+- 格式化token，然后验证
+	- 对比签名方法是否一致
+	- 获取key
+- 从token中提取用户名称和版本信息
+*/
 func (t *tokenJWT) info(ctx context.Context, token string, rev uint64) (*AuthInfo, bool) {
 	// rev isn't used in JWT, it is only used in simple token
 	var (
@@ -79,6 +88,9 @@ func (t *tokenJWT) info(ctx context.Context, token string, rev uint64) (*AuthInf
 	return &AuthInfo{Username: username, Revision: revision}, true
 }
 
+/***
+使用tokenJWT加密信息，并返回相应的token
+*/
 func (t *tokenJWT) assign(ctx context.Context, username string, revision uint64) (string, error) {
 	if t.verifyOnly {
 		return "", ErrVerifyOnly
@@ -113,6 +125,12 @@ func (t *tokenJWT) assign(ctx context.Context, username string, revision uint64)
 	return token, err
 }
 
+/***
+- 提取map中的信息，赋值到jwtOption中，包括了过期时间，公钥，私钥，签名方法
+- 收集map中多余的key
+- 提取签名的key
+- 创建tokenJWT，然后根据情况赋值verifyOnly
+*/
 func newTokenProviderJWT(lg *zap.Logger, optMap map[string]string) (*tokenJWT, error) {
 	if lg == nil {
 		lg = zap.NewNop()

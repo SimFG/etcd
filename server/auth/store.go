@@ -241,6 +241,9 @@ type authStore struct {
 	bcryptCost    int // the algorithm cost / strength for hashing auth passwords
 }
 
+/***
+开启权限校验
+*/
 func (as *authStore) AuthEnable() error {
 	as.enabledMu.Lock()
 	defer as.enabledMu.Unlock()
@@ -276,6 +279,9 @@ func (as *authStore) AuthEnable() error {
 	return nil
 }
 
+/***
+关闭权限校验
+*/
 func (as *authStore) AuthDisable() {
 	as.enabledMu.Lock()
 	defer as.enabledMu.Unlock()
@@ -308,6 +314,9 @@ func (as *authStore) Close() error {
 	return nil
 }
 
+/***
+使用username生成一个权限校验的token
+*/
 func (as *authStore) Authenticate(ctx context.Context, username, password string) (*pb.AuthenticateResponse, error) {
 	if !as.IsAuthEnabled() {
 		return nil, ErrAuthNotEnabled
@@ -337,6 +346,9 @@ func (as *authStore) Authenticate(ctx context.Context, username, password string
 	return &pb.AuthenticateResponse{Token: token}, nil
 }
 
+/***
+校验user信息，如果通过返回revision版本
+*/
 func (as *authStore) CheckPassword(username, password string) (uint64, error) {
 	if !as.IsAuthEnabled() {
 		return 0, ErrAuthNotEnabled
@@ -372,6 +384,9 @@ func (as *authStore) CheckPassword(username, password string) (uint64, error) {
 	return revision, nil
 }
 
+/***
+替换AuthBackend数据库
+*/
 func (as *authStore) Recover(be AuthBackend) {
 	as.be = be
 	tx := be.ReadTx()
@@ -390,6 +405,9 @@ func (as *authStore) Recover(be AuthBackend) {
 	as.enabledMu.Unlock()
 }
 
+/***
+加密password
+*/
 func (as *authStore) selectPassword(password string, hashedPassword string) ([]byte, error) {
 	if password != "" && hashedPassword == "" {
 		// This path is for processing log entries created by etcd whose version is older than 3.5
@@ -398,6 +416,9 @@ func (as *authStore) selectPassword(password string, hashedPassword string) ([]b
 	return base64.StdEncoding.DecodeString(hashedPassword)
 }
 
+/***
+添加用户
+*/
 func (as *authStore) UserAdd(r *pb.AuthUserAddRequest) (*pb.AuthUserAddResponse, error) {
 	if len(r.Name) == 0 {
 		return nil, ErrUserEmpty
@@ -412,6 +433,7 @@ func (as *authStore) UserAdd(r *pb.AuthUserAddRequest) (*pb.AuthUserAddResponse,
 		return nil, ErrUserAlreadyExist
 	}
 
+	// TODO simfg 为什么这里的NoPassword固定为false
 	options := r.Options
 	if options == nil {
 		options = &authpb.UserAddOptions{
@@ -442,6 +464,9 @@ func (as *authStore) UserAdd(r *pb.AuthUserAddRequest) (*pb.AuthUserAddResponse,
 	return &pb.AuthUserAddResponse{}, nil
 }
 
+/***
+删除用户
+*/
 func (as *authStore) UserDelete(r *pb.AuthUserDeleteRequest) (*pb.AuthUserDeleteResponse, error) {
 	if as.enabled && r.Name == rootUser {
 		as.lg.Error("cannot delete 'root' user", zap.String("user-name", r.Name))
@@ -471,6 +496,9 @@ func (as *authStore) UserDelete(r *pb.AuthUserDeleteRequest) (*pb.AuthUserDelete
 	return &pb.AuthUserDeleteResponse{}, nil
 }
 
+/***
+更改用户密码
+*/
 func (as *authStore) UserChangePassword(r *pb.AuthUserChangePasswordRequest) (*pb.AuthUserChangePasswordResponse, error) {
 	tx := as.be.BatchTx()
 	tx.Lock()
@@ -501,6 +529,7 @@ func (as *authStore) UserChangePassword(r *pb.AuthUserChangePasswordRequest) (*p
 
 	as.commitRevision(tx)
 
+	// TODO simfg 为什么这里直接删除缓存，但是不再添加
 	as.invalidateCachedPerm(r.Name)
 	as.tokenProvider.invalidateUser(r.Name)
 
@@ -512,6 +541,9 @@ func (as *authStore) UserChangePassword(r *pb.AuthUserChangePasswordRequest) (*p
 	return &pb.AuthUserChangePasswordResponse{}, nil
 }
 
+/***
+给用户授予某个角色权限
+*/
 func (as *authStore) UserGrantRole(r *pb.AuthUserGrantRoleRequest) (*pb.AuthUserGrantRoleResponse, error) {
 	tx := as.be.BatchTx()
 	tx.Lock()
@@ -558,6 +590,9 @@ func (as *authStore) UserGrantRole(r *pb.AuthUserGrantRoleRequest) (*pb.AuthUser
 	return &pb.AuthUserGrantRoleResponse{}, nil
 }
 
+/***
+获取用户的role列表
+*/
 func (as *authStore) UserGet(r *pb.AuthUserGetRequest) (*pb.AuthUserGetResponse, error) {
 	user := as.be.GetUser(r.Name)
 
@@ -570,6 +605,9 @@ func (as *authStore) UserGet(r *pb.AuthUserGetRequest) (*pb.AuthUserGetResponse,
 	return &resp, nil
 }
 
+/***
+获取所有的用户名称
+*/
 func (as *authStore) UserList(r *pb.AuthUserListRequest) (*pb.AuthUserListResponse, error) {
 	users := as.be.GetAllUsers()
 
@@ -580,6 +618,9 @@ func (as *authStore) UserList(r *pb.AuthUserListRequest) (*pb.AuthUserListRespon
 	return resp, nil
 }
 
+/***
+取消用户的某个角色权限
+*/
 func (as *authStore) UserRevokeRole(r *pb.AuthUserRevokeRoleRequest) (*pb.AuthUserRevokeRoleResponse, error) {
 	if as.enabled && r.Name == rootUser && r.Role == rootRole {
 		as.lg.Error(
@@ -631,6 +672,9 @@ func (as *authStore) UserRevokeRole(r *pb.AuthUserRevokeRoleRequest) (*pb.AuthUs
 	return &pb.AuthUserRevokeRoleResponse{}, nil
 }
 
+/***
+获取角色权限
+*/
 func (as *authStore) RoleGet(r *pb.AuthRoleGetRequest) (*pb.AuthRoleGetResponse, error) {
 	var resp pb.AuthRoleGetResponse
 
@@ -646,6 +690,9 @@ func (as *authStore) RoleGet(r *pb.AuthRoleGetRequest) (*pb.AuthRoleGetResponse,
 	return &resp, nil
 }
 
+/***
+获取角色名称列表
+*/
 func (as *authStore) RoleList(r *pb.AuthRoleListRequest) (*pb.AuthRoleListResponse, error) {
 	roles := as.be.GetAllRoles()
 
@@ -656,6 +703,9 @@ func (as *authStore) RoleList(r *pb.AuthRoleListRequest) (*pb.AuthRoleListRespon
 	return resp, nil
 }
 
+/***
+取消角色权限
+*/
 func (as *authStore) RoleRevokePermission(r *pb.AuthRoleRevokePermissionRequest) (*pb.AuthRoleRevokePermissionResponse, error) {
 	tx := as.be.BatchTx()
 	tx.Lock()
@@ -697,6 +747,9 @@ func (as *authStore) RoleRevokePermission(r *pb.AuthRoleRevokePermissionRequest)
 	return &pb.AuthRoleRevokePermissionResponse{}, nil
 }
 
+/***
+删除角色
+*/
 func (as *authStore) RoleDelete(r *pb.AuthRoleDeleteRequest) (*pb.AuthRoleDeleteResponse, error) {
 	if as.enabled && r.Role == rootRole {
 		as.lg.Error("cannot delete 'root' role", zap.String("role-name", r.Role))
@@ -743,6 +796,9 @@ func (as *authStore) RoleDelete(r *pb.AuthRoleDeleteRequest) (*pb.AuthRoleDelete
 	return &pb.AuthRoleDeleteResponse{}, nil
 }
 
+/***
+添加角色
+*/
 func (as *authStore) RoleAdd(r *pb.AuthRoleAddRequest) (*pb.AuthRoleAddResponse, error) {
 	if len(r.Name) == 0 {
 		return nil, ErrRoleEmpty
@@ -787,6 +843,9 @@ func (perms permSlice) Swap(i, j int) {
 	perms[i], perms[j] = perms[j], perms[i]
 }
 
+/***
+授予角色某个权限
+*/
 func (as *authStore) RoleGrantPermission(r *pb.AuthRoleGrantPermissionRequest) (*pb.AuthRoleGrantPermissionResponse, error) {
 	if r.Perm == nil {
 		return nil, ErrPermissionNotGiven
@@ -836,6 +895,9 @@ func (as *authStore) RoleGrantPermission(r *pb.AuthRoleGrantPermissionRequest) (
 	return &pb.AuthRoleGrantPermissionResponse{}, nil
 }
 
+/***
+用户是否有key操作相关的权限
+*/
 func (as *authStore) isOpPermitted(userName string, revision uint64, key, rangeEnd []byte, permTyp authpb.Permission_Type) error {
 	// TODO(mitake): this function would be costly so we need a caching mechanism
 	if !as.IsAuthEnabled() {
@@ -890,6 +952,9 @@ func (as *authStore) IsDeleteRangePermitted(authInfo *AuthInfo, key, rangeEnd []
 	return as.isOpPermitted(authInfo.Username, authInfo.Revision, key, rangeEnd, authpb.WRITE)
 }
 
+/***
+是否有root权限
+*/
 func (as *authStore) IsAdminPermitted(authInfo *AuthInfo) error {
 	if !as.IsAuthEnabled() {
 		return nil
@@ -988,6 +1053,9 @@ func (as *authStore) Revision() uint64 {
 	return atomic.LoadUint64(&as.revision)
 }
 
+/***
+根据tls从context中获取认证信息
+*/
 func (as *authStore) AuthInfoFromTLS(ctx context.Context) (ai *AuthInfo) {
 	peer, ok := peer.FromContext(ctx)
 	if !ok || peer == nil || peer.AuthInfo == nil {
@@ -1031,6 +1099,9 @@ func (as *authStore) AuthInfoFromTLS(ctx context.Context) (ai *AuthInfo) {
 	return ai
 }
 
+/***
+从context中获取token，然后从token中获取认证信息
+*/
 func (as *authStore) AuthInfoFromCtx(ctx context.Context) (*AuthInfo, error) {
 	if !as.IsAuthEnabled() {
 		return nil, nil
@@ -1064,6 +1135,10 @@ func (as *authStore) GenTokenPrefix() (string, error) {
 	return as.tokenProvider.genTokenPrefix()
 }
 
+/***
+从字符串中获取tokenType和token相关信息，格式类似为
+jwt,username=hello,password=123456
+*/
 func decomposeOpts(lg *zap.Logger, optstr string) (string, map[string]string, error) {
 	opts := strings.Split(optstr, ",")
 	tokenType := opts[0]
@@ -1098,6 +1173,9 @@ func decomposeOpts(lg *zap.Logger, optstr string) (string, map[string]string, er
 }
 
 // NewTokenProvider creates a new token provider.
+/***
+获取TokenProvider，主要tokenType的判断
+*/
 func NewTokenProvider(
 	lg *zap.Logger,
 	tokenOpts string,
@@ -1133,6 +1211,9 @@ func NewTokenProvider(
 	}
 }
 
+/***
+给context中注入root相关信息
+*/
 func (as *authStore) WithRoot(ctx context.Context) context.Context {
 	if !as.IsAuthEnabled() {
 		return ctx
