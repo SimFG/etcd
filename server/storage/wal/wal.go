@@ -432,7 +432,7 @@ func selectWALFiles(lg *zap.Logger, dirpath string, snap walpb.Snapshot) ([]stri
 /***
 打开WAL目录下的所有文件，并将File对象和Reader对象写入到返回结果红
 */
-func openWALFiles(lg *zap.Logger, dirpath string, names []string, nameIndex int, write bool) ([]io.Reader, []*fileutil.LockedFile, func() error, error) {
+func openWALFiles(lg *zap.Logger, dirpath string, names []string, nameIndex int, write bool) ([]fileutil.FileReader, []*fileutil.LockedFile, func() error, error) {
 	rcs := make([]io.ReadCloser, 0)
 	rs := make([]fileutil.FileReader, 0)
 	ls := make([]*fileutil.LockedFile, 0)
