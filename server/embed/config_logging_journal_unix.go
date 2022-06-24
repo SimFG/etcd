@@ -27,6 +27,7 @@ import (
 )
 
 // use stderr as fallback
+// 使用系统服务来管理日志 https://blog.51cto.com/zaishu/5137218
 func getJournalWriteSyncer() (zapcore.WriteSyncer, error) {
 	jw, err := logutil.NewJournalWriter(os.Stderr)
 	if err != nil {

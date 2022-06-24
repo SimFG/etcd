@@ -1,5 +1,5 @@
 # etcd 阅读
-根据文件顺序阅读相关功能
+根据文件顺序阅读相关功能，在阅读过程中，如果遇到什么疑惑可以在discussions栏进行讨论。
 
 ![etcd Logo](logos/etcd-horizontal-color.svg)
 
@@ -78,9 +78,21 @@ watcher功能的实现
 - [nop](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/auth/nop.go)
 - [range_perm_cache](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/auth/range_perm_cache.go)
 - [store](https://github.com/SimFG/etcd-doc/blob/simfg-doc/server/auth/store.go)
+### config log
+配置zap log
+- [config_logger](server/embed/config_logging.go)
+- [config](server/embed/config.go)
+- [config_trace](server/embed/config_tracing.go)
 
 ## MR列表
 阅读过程中，如果发现问题，可以etcd仓库提mr合入
-- [mvcc: improve the use of locks in index.go](https://github.com/etcd-io/etcd/pull/14084)
-- [wal: remove the repeated test case](https://github.com/etcd-io/etcd/pull/14106)
+- [config: Add the default case when failing to parse the log rotate config json](https://github.com/etcd-io/etcd/pull/14146)
 - [schedule: support to recover from job panic for the fifo](https://github.com/etcd-io/etcd/pull/14109)
+- [wal: remove the repeated test case](https://github.com/etcd-io/etcd/pull/14106)
+- [mvcc: improve the use of locks in index.go](https://github.com/etcd-io/etcd/pull/14084)
+
+## 函数列表
+- [net.SplitHostPort](server/embed/config.go) 获取url字符串的host port信息
+- [os.Stat](client/pkg/fileutil/fileutil.go) 获取文件状态，可以用于校验文件权限
+- [SelfCert](client/pkg/transport/listener.go#188) 用代码进行tls自签名，这样可以自动开启tls认证
+- [DialJournal](client/pkg/systemd/journal.go) 与系统服务通信，可用于校验某个系统服务是否可用

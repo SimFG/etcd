@@ -182,6 +182,9 @@ func (info TLSInfo) Empty() bool {
 	return info.CertFile == "" && info.KeyFile == ""
 }
 
+/*** 自签名
+selfSignedCertValidity 表示签名有效期，单位为年
+*/
 func SelfCert(lg *zap.Logger, dirpath string, hosts []string, selfSignedCertValidity uint, additionalUsages ...x509.ExtKeyUsage) (info TLSInfo, err error) {
 	info.Logger = lg
 	if selfSignedCertValidity == 0 {

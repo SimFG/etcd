@@ -42,6 +42,9 @@ func (cfg Config) GetLogger() *zap.Logger {
 
 // setupLogging initializes etcd logging.
 // Must be called after flag parsing or finishing configuring embed.Config.
+/***
+配置zap log
+*/
 func (cfg *Config) setupLogging() error {
 	switch cfg.Logger {
 	case "capnslog": // removed in v3.5
@@ -87,6 +90,7 @@ func (cfg *Config) setupLogging() error {
 				var path string
 				if cfg.EnableLogRotation {
 					// append rotate scheme to logs managed by lumberjack log rotation
+					// TODO simfg 为什么这部分文件要这样处理，以/开头，给文件加上/%2F是什么含义
 					if v[0:1] == "/" {
 						path = fmt.Sprintf("rotate:/%%2F%s", v[1:])
 					} else {
@@ -223,6 +227,9 @@ func NewZapCoreLoggerBuilder(lg *zap.Logger, _ zapcore.Core, _ zapcore.WriteSync
 // The method is not executed by embed server by default (since 3.5) to
 // enable setups where grpc/zap.Global logging is configured independently
 // or spans separate lifecycle (like in tests).
+/***
+设置zap的全局log，同时给grpc设置日志
+*/
 func (cfg *Config) SetupGlobalLoggers() {
 	lg := cfg.GetLogger()
 	if lg != nil {
@@ -244,6 +251,11 @@ type logRotationConfig struct {
 func (logRotationConfig) Sync() error { return nil }
 
 // setupLogRotation initializes log rotation for a single file path target.
+/***
+配置LogRotation，也就是是的日志文件达到一定大小，自动创建新的日志文件，其核心是使用了第三方库：
+https://github.com/natefinch/lumberjack
+关于zap的详细使用，参考：https://github.com/SimFG/milvus-note#2022623
+*/
 func setupLogRotation(logOutputs []string, logRotateConfigJSON string) error {
 	var logRotationConfig logRotationConfig
 	outputFilePaths := 0

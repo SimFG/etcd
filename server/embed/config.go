@@ -31,7 +31,7 @@ import (
 	"go.etcd.io/etcd/client/pkg/v3/tlsutil"
 	"go.etcd.io/etcd/client/pkg/v3/transport"
 	"go.etcd.io/etcd/client/pkg/v3/types"
-	"go.etcd.io/etcd/client/v3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/pkg/v3/flags"
 	"go.etcd.io/etcd/pkg/v3/netutil"
 	"go.etcd.io/etcd/server/v3/config"
@@ -755,6 +755,14 @@ func (cfg *Config) Validate() error {
 	return nil
 }
 
+/***
+TODO simfg 启动时，获取peer信息
+三种搭建集群设置
+case 1/2 discovery server
+case 3 dns
+default static
+https://skyao.gitbooks.io/learning-etcd3/content/documentation/op-guide/clustering.html
+*/
 // PeerURLsMapAndToken sets up an initial peer URLsMap and cluster token for bootstrap or discovery.
 func (cfg *Config) PeerURLsMapAndToken(which string) (urlsmap types.URLsMap, token string, err error) {
 	token = cfg.InitialClusterToken
@@ -805,6 +813,9 @@ func (cfg *Config) PeerURLsMapAndToken(which string) (urlsmap types.URLsMap, tok
 	return urlsmap, token, err
 }
 
+/***
+TODO simfg 获取集群信息
+*/
 // GetDNSClusterNames uses DNS SRV records to get a list of initial nodes for cluster bootstrapping.
 // This function will return a list of one or more nodes, as well as any errors encountered while
 // performing service discovery.
@@ -866,7 +877,7 @@ func (cfg Config) InitialClusterFromName(name string) (ret string) {
 		n = DefaultName
 	}
 	for i := range cfg.APUrls {
-		ret = ret + "," + n + "=" + cfg.APUrls[i].String()
+		ret += "," + n + "=" + cfg.APUrls[i].String()
 	}
 	return ret[1:]
 }
@@ -889,6 +900,9 @@ func (cfg Config) defaultClientHost() bool {
 	return len(cfg.ACUrls) == 1 && cfg.ACUrls[0].String() == DefaultAdvertiseClientURLs
 }
 
+/*** 自签名
+CipherSuites 加密套件
+*/
 func (cfg *Config) ClientSelfCert() (err error) {
 	if !cfg.ClientAutoTLS {
 		return nil

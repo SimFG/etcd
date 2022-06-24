@@ -29,6 +29,10 @@ import (
 
 const maxSamplingRatePerMillion = 1000000
 
+/***
+使用otel监控grpc
+TODO simfg 参考：https://github.com/open-telemetry/opentelemetry-go
+*/
 func validateTracingConfig(samplingRate int) error {
 	if samplingRate < 0 {
 		return fmt.Errorf("tracing sampling rate must be positive")
