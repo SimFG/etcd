@@ -30,6 +30,10 @@ const (
 
 // Wait is an interface that provides the ability to wait and trigger events that
 // are associated with IDs.
+/***
+提供等待和触发事件，事件通过ID进行关联
+感觉就是提供一个封装的chan
+*/
 type Wait interface {
 	// Register waits returns a chan that waits on the given ID.
 	// The chan will be triggered when Trigger is called with

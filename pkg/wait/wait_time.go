@@ -16,6 +16,11 @@ package wait
 
 import "sync"
 
+/***
+提供一个时间维度的chan
+Wait，返回一个chan，参数deadline表示其有效期在这个之前，也就是说如果这个上一次触发的时间大于这个，返回的chan将无效
+Trigger，触发deadline之前的所有chan
+*/
 type WaitTime interface {
 	// Wait returns a chan that waits on the given logical deadline.
 	// The chan will be triggered when Trigger is called with a

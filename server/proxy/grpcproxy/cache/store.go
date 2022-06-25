@@ -41,6 +41,7 @@ type Cache interface {
 }
 
 // keyFunc returns the key of a request, which is used to look up its caching response in the cache.
+// 返回一个代表request的字符串，用于在cache中寻找返回值
 func keyFunc(req *pb.RangeRequest) string {
 	// TODO: use marshalTo to reduce allocation
 	b, err := req.Marshal()
@@ -66,12 +67,14 @@ type cache struct {
 	lru *lru.Cache
 
 	// a reverse index for cache invalidation
+	// TODO simfg 参数含义
 	cachedRanges adt.IntervalTree
 
 	compactedRev int64
 }
 
 // Add adds the response of a request to the cache if its revision is larger than the compacted revision of the cache.
+// 往缓存中添加request缓存
 func (c *cache) Add(req *pb.RangeRequest, resp *pb.RangeResponse) {
 	key := keyFunc(req)
 
@@ -111,6 +114,7 @@ func (c *cache) Add(req *pb.RangeRequest, resp *pb.RangeResponse) {
 
 // Get looks up the caching response for a given request.
 // Get is also responsible for lazy eviction when accessing compacted entries.
+// 从cache中获取请求结果，如果请求非法，将会被移除缓存
 func (c *cache) Get(req *pb.RangeRequest) (*pb.RangeResponse, error) {
 	key := keyFunc(req)
 
@@ -129,6 +133,7 @@ func (c *cache) Get(req *pb.RangeRequest) (*pb.RangeResponse, error) {
 }
 
 // Invalidate invalidates the cache entries that intersecting with the given range from key to endkey.
+// 移除缓存
 func (c *cache) Invalidate(key, endkey []byte) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -156,6 +161,7 @@ func (c *cache) Invalidate(key, endkey []byte) {
 
 // Compact invalidate all caching response before the given rev.
 // Replace with the invalidation is lazy. The actual removal happens when the entries is accessed.
+// 设置compact版本
 func (c *cache) Compact(revision int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

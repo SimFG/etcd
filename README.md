@@ -83,9 +83,18 @@ watcher功能的实现
 - [config_logger](server/embed/config_logging.go)
 - [config](server/embed/config.go)
 - [config_trace](server/embed/config_tracing.go)
+### proxy
+主要是grpc的一些配置，下面主要涉及一些工具方法
+- [wait](pkg/wait/wait.go)
+- [wait_time](pkg/wait/wait_time.go)
+- [userspace](server/proxy/tcpproxy/userspace.go)
+- [store](server/proxy/grpcproxy/cache/store.go)
+- [chan_stream](server/proxy/grpcproxy/adapter/chan_stream.go)
 
 ## MR列表
 阅读过程中，如果发现问题，可以etcd仓库提mr合入
+- [proxy: Put the pb object into the struct](https://github.com/etcd-io/etcd/pull/14157)
+- [verify: Get backend using simple api](https://github.com/etcd-io/etcd/pull/14153)
 - [config: Add the default case when failing to parse the log rotate config json](https://github.com/etcd-io/etcd/pull/14146)
 - [schedule: support to recover from job panic for the fifo](https://github.com/etcd-io/etcd/pull/14109)
 - [wal: remove the repeated test case](https://github.com/etcd-io/etcd/pull/14106)

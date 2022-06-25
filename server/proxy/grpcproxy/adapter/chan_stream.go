@@ -139,6 +139,12 @@ func (s *chanStream) RecvMsg(m interface{}) error {
 	return s.ctx.Err()
 }
 
+/***
+一个简易的client-server
+通过返回的chanClientStream，可以获取消息
+参数中ssHandler函数，则是服务端，发送消息
+TODO simfg stream中的chanStream缓存好像未使用
+*/
 func newPipeStream(ctx context.Context, ssHandler func(chanServerStream) error) chanClientStream {
 	// ch1 is buffered so server can send error on close
 	ch1, ch2 := make(chan interface{}, 1), make(chan interface{})

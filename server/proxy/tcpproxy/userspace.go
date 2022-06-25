@@ -26,6 +26,8 @@ import (
 	"go.uber.org/zap"
 )
 
+// SRV 服务定位记录，是域名系统中用于指定服务器提供服务的位置（如主机名和端口）数据
+// https://zh.m.wikipedia.org/zh-hans/SRV%E8%AE%B0%E5%BD%95
 type remote struct {
 	mu       sync.Mutex
 	srv      *net.SRV
@@ -115,6 +117,9 @@ func (tp *TCPProxy) Run() error {
 	}
 }
 
+/***
+选择一个服务节点，会参考Priority和Weight
+*/
 func (tp *TCPProxy) pick() *remote {
 	var weighted []*remote
 	var unweighted []*remote
@@ -212,6 +217,9 @@ func (tp *TCPProxy) serve(in net.Conn) {
 	in.Close()
 }
 
+/***
+保活，固定间隔检测服务列表的状态，如果服务不可用了，尝试重连
+*/
 func (tp *TCPProxy) runMonitor() {
 	for {
 		select {

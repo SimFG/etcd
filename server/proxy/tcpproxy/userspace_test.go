@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"testing"
 )
 
@@ -42,11 +43,10 @@ func TestUserspaceProxy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var port uint16
-	fmt.Sscanf(u.Port(), "%d", &port)
+	port, _ := strconv.ParseUint(u.Port(), 10, 16)
 	p := TCPProxy{
 		Listener:  l,
-		Endpoints: []*net.SRV{{Target: u.Hostname(), Port: port}},
+		Endpoints: []*net.SRV{{Target: u.Hostname(), Port: uint16(port)}},
 	}
 	go p.Run()
 	defer p.Stop()
@@ -68,6 +68,7 @@ func TestUserspaceProxy(t *testing.T) {
 	}
 }
 
+// "127.0.0.1:0" 0端口可用于绑定到随机可用端口，但使用它来连接没有意义…
 func TestUserspaceProxyPriority(t *testing.T) {
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -79,20 +80,21 @@ func TestUserspaceProxyPriority(t *testing.T) {
 		Payload  string
 		Priority uint16
 	}{
-		{"hello proxy 1", 1},
 		{"hello proxy 2", 2},
 		{"hello proxy 3", 3},
+		{"hello proxy 1", 1},
 	}
 
 	var eps []*net.SRV
 	var front *url.URL
-	for _, b := range backends {
+	for index, b := range backends {
 		backend := b
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprint(w, backend.Payload)
 		}))
 		defer ts.Close()
 
+		fmt.Println(index, ts.URL)
 		front, err = url.Parse(ts.URL)
 		if err != nil {
 			t.Fatal(err)
