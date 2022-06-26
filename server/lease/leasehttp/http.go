@@ -46,6 +46,9 @@ type leaseHandler struct {
 	waitch func() <-chan struct{}
 }
 
+/***
+服务端：处理lease的请求，包括了延长lease和查看lease剩余时间
+*/
 func (h *leaseHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
@@ -143,6 +146,9 @@ func (h *leaseHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // RenewHTTP renews a lease at a given primary server.
 // TODO: Batch request in future?
+/***
+客户端发起，lease时间延长请求
+*/
 func RenewHTTP(ctx context.Context, id lease.LeaseID, url string, rt http.RoundTripper) (int64, error) {
 	// will post lreq protobuf to leader
 	lreq, err := (&pb.LeaseKeepAliveRequest{ID: int64(id)}).Marshal()
@@ -190,6 +196,9 @@ func RenewHTTP(ctx context.Context, id lease.LeaseID, url string, rt http.RoundT
 }
 
 // TimeToLiveHTTP retrieves lease information of the given lease ID.
+/***
+客户端发起，查看lease剩余时间请求
+*/
 func TimeToLiveHTTP(ctx context.Context, id lease.LeaseID, keys bool, url string, rt http.RoundTripper) (*leasepb.LeaseInternalResponse, error) {
 	// will post lreq protobuf to leader
 	lreq, err := (&leasepb.LeaseInternalRequest{

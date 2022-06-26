@@ -79,40 +79,52 @@ type Checkpointer func(ctx context.Context, lc *pb.LeaseCheckpointRequest)
 type LeaseID int64
 
 // Lessor owns leases. It can grant, revoke, renew and modify leases for lessee.
+/***
+lease对外接口
+*/
 type Lessor interface {
 	// SetRangeDeleter lets the lessor create TxnDeletes to the store.
 	// Lessor deletes the items in the revoked or expired lease by creating
 	// new TxnDeletes.
+	// 设置TxnDelete的创建函数
 	SetRangeDeleter(rd RangeDeleter)
 
+	// 设置处理checkpoint函数
 	SetCheckpointer(cp Checkpointer)
 
 	// Grant grants a lease that expires at least after TTL seconds.
+	// 创建lease
 	Grant(id LeaseID, ttl int64) (*Lease, error)
 	// Revoke revokes a lease with given ID. The item attached to the
 	// given lease will be removed. If the ID does not exist, an error
 	// will be returned.
+	// 删除lease
 	Revoke(id LeaseID) error
 
 	// Checkpoint applies the remainingTTL of a lease. The remainingTTL is used in Promote to set
 	// the expiry of leases to less than the full TTL when possible.
+	// 设置lease剩余时间
 	Checkpoint(id LeaseID, remainingTTL int64) error
 
 	// Attach attaches given leaseItem to the lease with given LeaseID.
 	// If the lease does not exist, an error will be returned.
+	// 给lease绑定资源
 	Attach(id LeaseID, items []LeaseItem) error
 
 	// GetLease returns LeaseID for given item.
 	// If no lease found, NoLease value will be returned.
+	// 获取资源绑定的lease id
 	GetLease(item LeaseItem) LeaseID
 
 	// Detach detaches given leaseItem from the lease with given LeaseID.
 	// If the lease does not exist, an error will be returned.
+	// 解绑lease与资源的关系
 	Detach(id LeaseID, items []LeaseItem) error
 
 	// Promote promotes the lessor to be the primary lessor. Primary lessor manages
 	// the expiration and renew of leases.
 	// Newly promoted lessor renew the TTL of all lease to extend + previous TTL.
+	// 给lease续期
 	Promote(extend time.Duration)
 
 	// Demote demotes the lessor from being the primary lessor.
@@ -120,6 +132,7 @@ type Lessor interface {
 
 	// Renew renews a lease with given ID. It returns the renewed TTL. If the ID does not exist,
 	// an error will be returned.
+	// lease重新计时
 	Renew(id LeaseID) (int64, error)
 
 	// Lookup gives the lease at a given lease id, if any
@@ -149,7 +162,7 @@ type lessor struct {
 	demotec chan struct{}
 
 	leaseMap             map[LeaseID]*Lease
-	leaseExpiredNotifier *LeaseExpiredNotifier
+	leaseExpiredNotifier *LeaseExpiredNotifier // 用于记录lease，便于一定间隔判断lease是否过期
 	leaseCheckpointHeap  LeaseQueue
 	itemMap              map[LeaseItem]LeaseID
 
@@ -249,6 +262,7 @@ func newLessor(lg *zap.Logger, b backend.Backend, cluster cluster, cfg LessorCon
 // very small window (within second normally which depends on go scheduling) that
 // a raft follow is the primary between the raft leader demotion and lessor demotion.
 // Usually this should not be a problem. Lease should not be that sensitive to timing.
+// 节点是否是leader节点
 func (le *lessor) isPrimary() bool {
 	return le.demotec != nil
 }
@@ -389,6 +403,7 @@ func greaterOrEqual(first, second semver.Version) bool {
 
 // Renew renews an existing lease. If the given lease does not exist or
 // has expired, an error will be returned.
+// 给lease续期
 func (le *lessor) Renew(id LeaseID) (int64, error) {
 	le.mu.RLock()
 	if !le.isPrimary() {
@@ -408,6 +423,7 @@ func (le *lessor) Renew(id LeaseID) (int64, error) {
 	clearRemainingTTL := le.cp != nil && l.remainingTTL > 0
 
 	le.mu.RUnlock()
+	// TODO simfg 是否过期为什么不可以使用remainingTTL == 0来判断
 	if l.expired() {
 		select {
 		// A expired lease might be pending for revoking or going through
@@ -432,6 +448,7 @@ func (le *lessor) Renew(id LeaseID) (int64, error) {
 	}
 
 	le.mu.Lock()
+	// TODO simfg 这里没有更新l里面的remainingTTL，难道是上面的cp方法进行了更新？
 	l.refresh(0)
 	item := &LeaseWithTime{id: l.ID, time: l.expiry}
 	le.leaseExpiredNotifier.RegisterOrUpdate(item)
@@ -603,6 +620,9 @@ func (le *lessor) Stop() {
 	<-le.doneC
 }
 
+// 开启两个协程
+// 一个固定间隔获取过期的lease进行销毁
+//
 func (le *lessor) runLoop() {
 	defer close(le.doneC)
 
@@ -620,6 +640,7 @@ func (le *lessor) runLoop() {
 
 // revokeExpiredLeases finds all leases past their expiry and sends them to expired channel for
 // to be revoked.
+// 将过期的lease数组放入expiredC 通道中
 func (le *lessor) revokeExpiredLeases() {
 	var ls []*Lease
 
@@ -647,8 +668,10 @@ func (le *lessor) revokeExpiredLeases() {
 
 // checkpointScheduledLeases finds all scheduled lease checkpoints that are due and
 // submits them to the checkpointer to persist them to the consensus log.
+// leader 负责租约过期，follower 从不主动失效。那么当主从切换时，follower 如何获取 remainingTTL 呢？换句话如何更新小顶堆呢？答案就是 CheckPoint
 func (le *lessor) checkpointScheduledLeases() {
 	// rate limit
+	// TODO simfg 不明白什么含义
 	for i := 0; i < leaseCheckpointRate/2; i++ {
 		var cps []*pb.LeaseCheckpoint
 
@@ -678,6 +701,7 @@ func (le *lessor) clearLeaseExpiredNotifier() {
 // expireExists returns true if expiry items exist.
 // It pops only when expiry item exists.
 // "next" is true, to indicate that it may exist in next attempt.
+// 获取过期的lease
 func (le *lessor) expireExists() (l *Lease, ok bool, next bool) {
 	if le.leaseExpiredNotifier.Len() == 0 {
 		return nil, false, false
@@ -706,6 +730,7 @@ func (le *lessor) expireExists() (l *Lease, ok bool, next bool) {
 
 // findExpiredLeases loops leases in the leaseMap until reaching expired limit
 // and returns the expired leases that needed to be revoked.
+// 发现指定数量的过期lease
 func (le *lessor) findExpiredLeases(limit int) []*Lease {
 	leases := make([]*Lease, 0, 16)
 
@@ -753,6 +778,7 @@ func (le *lessor) scheduleCheckpointIfNeeded(lease *Lease) {
 	}
 }
 
+// 获取一定数量的LeaseCheckpoint对象，用于更新剩余时间
 func (le *lessor) findDueScheduledCheckpoints(checkpointLimit int) []*pb.LeaseCheckpoint {
 	if le.cp == nil {
 		return nil

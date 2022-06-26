@@ -24,6 +24,12 @@ import (
 	"go.etcd.io/etcd/server/v3/storage/schema"
 )
 
+/***
+ttl lease过期时间
+remainingTTL 还剩多久时间过期
+expiry 哪个时间点过期
+TODO simfg remainingTTL expiry有啥区别
+*/
 type Lease struct {
 	ID           LeaseID
 	ttl          int64 // time to live of the lease in seconds

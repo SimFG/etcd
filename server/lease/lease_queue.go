@@ -30,6 +30,7 @@ type LeaseWithTime struct {
 
 type LeaseQueue []*LeaseWithTime
 
+// Len Less Swap实现排序接口 sort.Interface
 func (pq LeaseQueue) Len() int { return len(pq) }
 
 func (pq LeaseQueue) Less(i, j int) bool {
@@ -42,6 +43,7 @@ func (pq LeaseQueue) Swap(i, j int) {
 	pq[j].index = j
 }
 
+// 实现最小堆接口
 func (pq *LeaseQueue) Push(x interface{}) {
 	n := len(*pq)
 	item := x.(*LeaseWithTime)
@@ -80,6 +82,9 @@ func (mq *LeaseExpiredNotifier) Init() {
 	}
 }
 
+/***
+使用最小堆管理lease
+*/
 func (mq *LeaseExpiredNotifier) RegisterOrUpdate(item *LeaseWithTime) {
 	if old, ok := mq.m[item.id]; ok {
 		old.time = item.time

@@ -90,6 +90,12 @@ watcher功能的实现
 - [userspace](server/proxy/tcpproxy/userspace.go)
 - [store](server/proxy/grpcproxy/cache/store.go)
 - [chan_stream](server/proxy/grpcproxy/adapter/chan_stream.go)
+### lease
+文章：[lease源码分析](https://www.modb.pro/db/79463)
+- [lease](server/lease/lease.go)
+- [lease_queue](server/lease/lease_queue.go)
+- [http](server/lease/leasehttp/http.go)
+- [lessor](server/lease/lessor.go)
 
 ## MR列表
 阅读过程中，如果发现问题，可以etcd仓库提mr合入
