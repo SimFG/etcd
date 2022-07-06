@@ -40,6 +40,7 @@ func max(a, b uint64) uint64 {
 	return b
 }
 
+// TODO simfg local msg是什么意思
 func IsLocalMsg(msgt pb.MessageType) bool {
 	return msgt == pb.MsgHup || msgt == pb.MsgBeat || msgt == pb.MsgUnreachable ||
 		msgt == pb.MsgSnapStatus || msgt == pb.MsgCheckQuorum

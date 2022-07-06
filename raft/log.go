@@ -21,6 +21,7 @@ import (
 	pb "go.etcd.io/etcd/raft/v3/raftpb"
 )
 
+// 日志处理部分，也就是整个集群中每个节点数据如何处理
 type raftLog struct {
 	// storage contains all stable entries since the last snapshot.
 	storage Storage

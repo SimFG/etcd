@@ -92,6 +92,7 @@ type WatchResponse struct {
 
 // watchStream contains a collection of watchers that share
 // one streaming chan to send out watched events and other control events.
+// 服务端stream，连接serverWatchStream和WatcherKV
 type watchStream struct {
 	watchable watchable
 	ch        chan WatchResponse
@@ -131,7 +132,7 @@ func (ws *watchStream) Watch(id WatchID, key, end []byte, startRev int64, fcs ..
 			ws.nextID++
 		}
 		id = ws.nextID
-		ws.nextID++
+		// TODO simfg pr
 	} else if _, ok := ws.watchers[id]; ok {
 		return -1, ErrWatcherDuplicateID
 	}
@@ -203,6 +204,7 @@ func (ws *watchStream) Rev() int64 {
 
 /***
 查看watcher的请求进度
+返回当前watcher处于物理时钟的哪一个revision
 */
 func (ws *watchStream) RequestProgress(id WatchID) {
 	ws.mu.Lock()

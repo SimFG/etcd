@@ -28,6 +28,7 @@ import (
 // simple and joint consensus while performing the proper validation that allows
 // refusing invalid configuration changes before they affect the active
 // configuration.
+// 集群配置变更时的逻辑处理
 type Changer struct {
 	Tracker   tracker.ProgressTracker
 	LastIndex uint64

@@ -30,6 +30,8 @@ func (tw *watchableStoreTxnWrite) End() {
 		return
 	}
 
+	// tw.Rev() 返回的是开始事务前的revision
+	// +1 表示当前写完成后的revision
 	rev := tw.Rev() + 1
 	evs := make([]mvccpb.Event, len(changes))
 	for i, change := range changes {

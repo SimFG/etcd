@@ -20,18 +20,23 @@ import pb "go.etcd.io/etcd/raft/v3/raftpb"
 // Note that unstable.offset may be less than the highest log
 // position in storage; this means that the next write to storage
 // might need to truncate the log before persisting unstable.entries.
+// TODO simfg offset的含义是什么
+// TODO simfg snapshot entries 两者之间有什么关系，为什么需要通过offset关联
+// 因为Entry的存储是由应用层负责的，所以raft需要暂时存储还未存到Storage中的Entry或者Snapshot，在创建Ready时，Entry和Snapshot会被封装到Ready，由应用层写入到storage。
 type unstable struct {
 	// the incoming unstable snapshot, if any.
 	snapshot *pb.Snapshot
 	// all entries that have not yet been written to storage.
 	entries []pb.Entry
-	offset  uint64
+	// 符合条件：entries[i].index = i + offset
+	offset uint64
 
 	logger Logger
 }
 
 // maybeFirstIndex returns the index of the first possible entry in entries
 // if it has a snapshot.
+// 获取第一个index，也可以被称为最小的index
 func (u *unstable) maybeFirstIndex() (uint64, bool) {
 	if u.snapshot != nil {
 		return u.snapshot.Metadata.Index + 1, true
@@ -41,6 +46,7 @@ func (u *unstable) maybeFirstIndex() (uint64, bool) {
 
 // maybeLastIndex returns the last index if it has at least one
 // unstable entry or snapshot.
+// 获取最大的index，如果数组为空，则是snapshot的index
 func (u *unstable) maybeLastIndex() (uint64, bool) {
 	if l := len(u.entries); l != 0 {
 		return u.offset + uint64(l) - 1, true
@@ -53,6 +59,10 @@ func (u *unstable) maybeLastIndex() (uint64, bool) {
 
 // maybeTerm returns the term of the entry at index i, if there
 // is any.
+// 根据index返回term
+// - 如果小于offset，则直接返回snapshot的term
+// - 获取最大index，然后冲entries中获取相应的term
+// 值得注意的是，u.offset = u.snapshot.Metadata.Index + 1
 func (u *unstable) maybeTerm(i uint64) (uint64, bool) {
 	if i < u.offset {
 		if u.snapshot != nil && u.snapshot.Metadata.Index == i {
@@ -72,6 +82,9 @@ func (u *unstable) maybeTerm(i uint64) (uint64, bool) {
 	return u.entries[i-u.offset].Term, true
 }
 
+/***
+移动offset，表明entries中部分元素已经存入storage中
+*/
 func (u *unstable) stableTo(i, t uint64) {
 	gt, ok := u.maybeTerm(i)
 	if !ok {
@@ -91,11 +104,17 @@ func (u *unstable) stableTo(i, t uint64) {
 // if most of it isn't being used. This avoids holding references to a bunch of
 // potentially large entries that aren't needed anymore. Simply clearing the
 // entries wouldn't be safe because clients might still be using them.
+// 如果条目切片中的大部分没有被使用，则 shrinkEntriesArray 会丢弃条目切片使用的底层数组。
+// 这避免了对一堆不再需要的潜在大条目的引用。 简单地清除条目并不安全，因为客户可能仍在使用它们。
+// TODO simfg 貌似这个没什么用
 func (u *unstable) shrinkEntriesArray() {
 	// We replace the array if we're using less than half of the space in
 	// it. This number is fairly arbitrary, chosen as an attempt to balance
 	// memory usage vs number of allocations. It could probably be improved
 	// with some focused tuning.
+	// 如果我们使用的空间不足一半，我们将替换该数组。
+	// 这个数字是相当随意的，选择它是为了平衡内存使用与分配数量。
+	// 它可能会通过一些集中调整来改进。
 	const lenMultiple = 2
 	if len(u.entries) == 0 {
 		u.entries = nil
@@ -106,18 +125,30 @@ func (u *unstable) shrinkEntriesArray() {
 	}
 }
 
+/***
+snapshot被提交到storage中，则snapshot置为空
+*/
 func (u *unstable) stableSnapTo(i uint64) {
 	if u.snapshot != nil && u.snapshot.Metadata.Index == i {
 		u.snapshot = nil
 	}
 }
 
+/***
+存储snapshot
+TODO simfg 为什么这里要把entries置为空呢
+*/
 func (u *unstable) restore(s pb.Snapshot) {
 	u.offset = s.Metadata.Index + 1
 	u.entries = nil
 	u.snapshot = &s
 }
 
+/***
+------ offset ------- offset + len ------
+- case2 ------- case3 ----- case1
+这里应该默认ents首元素的index不会大于offset + len
+*/
 func (u *unstable) truncateAndAppend(ents []pb.Entry) {
 	after := ents[0].Index
 	switch {

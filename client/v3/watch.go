@@ -43,6 +43,8 @@ type Event mvccpb.Event
 
 type WatchChan <-chan WatchResponse
 
+// 理解这部分，需要先看看grpc流式请求
+// https://segmentfault.com/a/1190000016503114
 type Watcher interface {
 	// Watch watches on a key or prefix. The watched events will be returned
 	// through the returned channel. If revisions waiting to be sent over the
@@ -282,6 +284,7 @@ func (w *watcher) newWatcherGrpcStream(inctx context.Context) *watchGrpcStream {
 		resumec:    make(chan struct{}),
 		lg:         w.lg,
 	}
+	// 处理监听key的watch各种事件
 	go wgs.run()
 	return wgs
 }
@@ -526,6 +529,8 @@ func (w *watchGrpcStream) run() {
 	}()
 
 	// start a stream with the etcd grpc server
+	// 这个是stream grpc的client
+	// stream grpc: https://segmentfault.com/a/1190000016503114
 	if wc, closeErr = w.newWatchClient(); closeErr != nil {
 		return
 	}
@@ -536,6 +541,7 @@ func (w *watchGrpcStream) run() {
 	for {
 		select {
 		// Watch() requested
+		//接收请求
 		case req := <-w.reqc:
 			switch wreq := req.(type) {
 			case *watchRequest:
@@ -547,9 +553,9 @@ func (w *watchGrpcStream) run() {
 					outc:    outc,
 					// unbuffered so resumes won't cause repeat events
 					recvc: make(chan *WatchResponse),
+					donec: make(chan struct{}),
 				}
 
-				ws.donec = make(chan struct{})
 				w.wg.Add(1)
 				go w.serveSubstream(ws, w.resumec)
 
@@ -557,6 +563,7 @@ func (w *watchGrpcStream) run() {
 				w.resuming = append(w.resuming, ws)
 				if len(w.resuming) == 1 {
 					// head of resume queue, can register a new watcher
+					// 首次watch，client向stream grpc发送消息，建立stream
 					if err := wc.Send(ws.initReq.toPB()); err != nil {
 						w.lg.Debug("error when sending request", zap.Error(err))
 					}
@@ -568,6 +575,7 @@ func (w *watchGrpcStream) run() {
 			}
 
 		// new events from the watch client
+		// 处理stream grpc的返回
 		case pbresp := <-w.respc:
 			if cur == nil || pbresp.Created || pbresp.Canceled {
 				cur = pbresp
@@ -695,7 +703,7 @@ func (w *watchGrpcStream) nextResume() *watcherStream {
 		if w.resuming[0] != nil {
 			return w.resuming[0]
 		}
-		w.resuming = w.resuming[1:len(w.resuming)]
+		w.resuming = w.resuming[1:]
 	}
 	return nil
 }
@@ -752,6 +760,7 @@ func (w *watchGrpcStream) unicastResponse(wr *WatchResponse, watchId int64) bool
 }
 
 // serveWatchClient forwards messages from the grpc stream to run()
+// Watch_WatchClient是stream grpc
 func (w *watchGrpcStream) serveWatchClient(wc pb.Watch_WatchClient) {
 	for {
 		resp, err := wc.Recv()
@@ -771,6 +780,7 @@ func (w *watchGrpcStream) serveWatchClient(wc pb.Watch_WatchClient) {
 }
 
 // serveSubstream forwards watch responses from run() to the subscriber
+// TODO simfg 不明白这部分逻辑在干什么
 func (w *watchGrpcStream) serveSubstream(ws *watcherStream, resumec chan struct{}) {
 	if ws.closing {
 		panic("created substream goroutine but substream is closing")
@@ -805,7 +815,6 @@ func (w *watchGrpcStream) serveSubstream(ws *watcherStream, resumec chan struct{
 			if ws.buf[0].Err() != nil {
 				return
 			}
-			ws.buf[0] = nil
 			ws.buf = ws.buf[1:]
 		case wr, ok := <-ws.recvc:
 			if !ok {
@@ -966,6 +975,8 @@ var maxBackoff = 100 * time.Millisecond
 // openWatchClient retries opening a watch client until success or halt.
 // manually retry in case "ws==nil && err==nil"
 // TODO: remove FailFast=false
+// 获取stream grpc client对象，用于调用grpc
+// 如果出现unavailable，会进行重试
 func (w *watchGrpcStream) openWatchClient() (ws pb.Watch_WatchClient, err error) {
 	backoff := time.Millisecond
 	for {

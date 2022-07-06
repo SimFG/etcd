@@ -71,12 +71,14 @@ func (s *Snapshotter) SaveSnap(snapshot raftpb.Snapshot) error {
 	return s.save(&snapshot)
 }
 
+/**将snapshot对象保存到dir文件目录下的文件中
+ */
 func (s *Snapshotter) save(snapshot *raftpb.Snapshot) error {
 	start := time.Now()
 
 	fname := fmt.Sprintf("%016x-%016x%s", snapshot.Metadata.Term, snapshot.Metadata.Index, snapSuffix)
 	b := pbutil.MustMarshal(snapshot)
-	crc := crc32.Update(0, crcTable, b)
+	crc := crc32.Update(0, crcTable, b) // 加密，保证数据不被修改
 	snap := snappb.Snapshot{Crc: crc, Data: b}
 	d, err := snap.Marshal()
 	if err != nil {
@@ -104,11 +106,13 @@ func (s *Snapshotter) save(snapshot *raftpb.Snapshot) error {
 }
 
 // Load returns the newest snapshot.
+// 加载最新的Snapshot
 func (s *Snapshotter) Load() (*raftpb.Snapshot, error) {
 	return s.loadMatching(func(*raftpb.Snapshot) bool { return true })
 }
 
 // LoadNewestAvailable loads the newest snapshot available that is in walSnaps.
+// 加载符合walSnaps条件最新的Snapshot
 func (s *Snapshotter) LoadNewestAvailable(walSnaps []walpb.Snapshot) (*raftpb.Snapshot, error) {
 	return s.loadMatching(func(snapshot *raftpb.Snapshot) bool {
 		m := snapshot.Metadata
@@ -136,6 +140,7 @@ func (s *Snapshotter) loadMatching(matchFn func(*raftpb.Snapshot) bool) (*raftpb
 	return nil, ErrNoSnapshot
 }
 
+// 加载snap，如果失败，会将文件修改为带后缀的broken
 func loadSnap(lg *zap.Logger, dir, name string) (*raftpb.Snapshot, error) {
 	fpath := filepath.Join(dir, name)
 	snap, err := Read(lg, fpath)
@@ -158,6 +163,11 @@ func loadSnap(lg *zap.Logger, dir, name string) (*raftpb.Snapshot, error) {
 }
 
 // Read reads the snapshot named by snapname and returns the snapshot.
+// 加载snapshot
+// - 读取文件
+// - 获取snappb.Snapshot对象
+// - 验证数据是否正确
+// - 获取raftpb.Snapshot
 func Read(lg *zap.Logger, snapname string) (*raftpb.Snapshot, error) {
 	b, err := os.ReadFile(snapname)
 	if err != nil {
@@ -213,6 +223,7 @@ func Read(lg *zap.Logger, snapname string) (*raftpb.Snapshot, error) {
 
 // snapNames returns the filename of the snapshots in logical time order (from newest to oldest).
 // If there is no available snapshots, an ErrNoSnapshot will be returned.
+// 获取snap目录下的snapshot文件
 func (s *Snapshotter) snapNames() ([]string, error) {
 	dir, err := os.Open(s.dir)
 	if err != nil {
@@ -270,6 +281,9 @@ func (s *Snapshotter) cleanupSnapdir(filenames []string) (names []string, err er
 	return names, nil
 }
 
+/***
+删除无效的.snap.db文件
+*/
 func (s *Snapshotter) ReleaseSnapDBs(snap raftpb.Snapshot) error {
 	dir, err := os.Open(s.dir)
 	if err != nil {

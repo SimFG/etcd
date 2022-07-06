@@ -96,9 +96,16 @@ watcher功能的实现
 - [lease_queue](server/lease/lease_queue.go)
 - [http](server/lease/leasehttp/http.go)
 - [lessor](server/lease/lessor.go)
+### raft
+文章：
+- [raft论文翻译](https://github.com/maemual/raft-zh_cn/blob/master/raft-zh_cn.md)
+- [raft动画演示](http://www.kailing.pub/raft/index.html)
 
 ## MR列表
 阅读过程中，如果发现问题，可以etcd仓库提mr合入
+- [ectdctl: Add the SilenceErrors config For the cobra.Command](https://github.com/etcd-io/etcd/pull/14173)
+- [snap: Delete the nil judgment of the log object](https://github.com/etcd-io/etcd/pull/14172)
+- [raft: Remove the redundant append execution](https://github.com/etcd-io/etcd/pull/14171)
 - [proxy: Put the pb object into the struct](https://github.com/etcd-io/etcd/pull/14157)
 - [verify: Get backend using simple api](https://github.com/etcd-io/etcd/pull/14153)
 - [config: Add the default case when failing to parse the log rotate config json](https://github.com/etcd-io/etcd/pull/14146)

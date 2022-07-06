@@ -17,7 +17,6 @@
 package idutil
 
 import (
-	"math"
 	"sync/atomic"
 	"time"
 )
@@ -70,6 +69,8 @@ func (g *Generator) Next() uint64 {
 	return id
 }
 
+// TODO simfg pr 这个函数好像没有用
 func lowbit(x uint64, n uint) uint64 {
-	return x & (math.MaxUint64 >> (64 - n))
+	//return x & (math.MaxUint64 >> (64 - n))
+	return x
 }

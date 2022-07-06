@@ -37,6 +37,8 @@ var (
 
 // SoftState provides state that is useful for logging and debugging.
 // The state is volatile and does not need to be persisted to the WAL.
+// HardState 需要持久化的信息，便于节点当机后重新启动可以恢复
+// SoftState 部分内存信息，只用于运行时
 type SoftState struct {
 	Lead      uint64 // must use atomic operations to access; keep 64-bit aligned.
 	RaftState StateType
@@ -131,6 +133,7 @@ type Node interface {
 	Campaign(ctx context.Context) error
 	// Propose proposes that data be appended to the log. Note that proposals can be lost without
 	// notice, therefore it is user's job to ensure proposal retries.
+	// 处理client的消息，将数据发送给raft节点处理，数据最终会被存储到unstable中
 	Propose(ctx context.Context, data []byte) error
 	// ProposeConfChange proposes a configuration change. Like any proposal, the
 	// configuration change may be dropped with or without an error being
@@ -147,6 +150,7 @@ type Node interface {
 	ProposeConfChange(ctx context.Context, cc pb.ConfChangeI) error
 
 	// Step advances the state machine using the given message. ctx.Err() will be returned, if any.
+	// 处理节点之间的消息
 	Step(ctx context.Context, msg pb.Message) error
 
 	// Ready returns a channel that returns the current point-in-time state.
@@ -154,6 +158,7 @@ type Node interface {
 	//
 	// NOTE: No committed entries from the next Ready may be applied until all committed entries
 	// and snapshots from the previous one have finished.
+	// 将数据从unstable状态转变成commit状态
 	Ready() <-chan Ready
 
 	// Advance notifies the Node that the application has saved progress up to the last Ready.
@@ -165,6 +170,7 @@ type Node interface {
 	// commands. For example. when the last Ready contains a snapshot, the application might take
 	// a long time to apply the snapshot data. To continue receiving Ready without blocking raft
 	// progress, it can call Advance before finishing applying the last ready.
+	// 数据完成状态转换后调用
 	Advance()
 	// ApplyConfChange applies a config change (previously passed to
 	// ProposeConfChange) to the node. This must be called whenever a config
@@ -255,13 +261,15 @@ type msgWithResult struct {
 
 // node is the canonical implementation of the Node interface
 type node struct {
-	propc      chan msgWithResult
+	// client 消息接收通道
+	propc chan msgWithResult
+	// 节点之间消息通信通道
 	recvc      chan pb.Message
 	confc      chan pb.ConfChangeV2
 	confstatec chan pb.ConfState
 	readyc     chan Ready
 	advancec   chan struct{}
-	tickc      chan struct{}
+	tickc      chan struct{} // 定时器，主要用于心跳和选举
 	done       chan struct{}
 	stop       chan struct{}
 	status     chan chan Status
@@ -345,7 +353,7 @@ func (n *node) run() {
 		// TODO: maybe buffer the config propose if there exists one (the way
 		// described in raft dissertation)
 		// Currently it is dropped in Step silently.
-		case pm := <-propc:
+		case pm := <-propc: // 接收客户端api的请求
 			m := pm.m
 			m.From = r.id
 			err := r.Step(m)
@@ -353,12 +361,12 @@ func (n *node) run() {
 				pm.result <- err
 				close(pm.result)
 			}
-		case m := <-n.recvc:
+		case m := <-n.recvc: // 接收节点间的消息
 			// filter out response message from unknown From.
 			if pr := r.prs.Progress[m.From]; pr != nil || !IsResponseMsg(m.Type) {
 				r.Step(m)
 			}
-		case cc := <-n.confc:
+		case cc := <-n.confc: // 接收客户端配置变更的消息
 			_, okBefore := r.prs.Progress[r.id]
 			cs := r.applyConfChange(cc)
 			// If the node was removed, block incoming proposals. Note that we
@@ -391,7 +399,7 @@ func (n *node) run() {
 			case n.confstatec <- cs:
 			case <-n.done:
 			}
-		case <-n.tickc:
+		case <-n.tickc: // 接收心跳相关消息
 			n.rn.Tick()
 		case readyc <- rd:
 			n.rn.acceptReady(rd)
@@ -561,6 +569,7 @@ func (n *node) ReadIndex(ctx context.Context, rctx []byte) error {
 	return n.step(ctx, pb.Message{Type: pb.MsgReadIndex, Entries: []pb.Entry{{Data: rctx}}})
 }
 
+// raft使用Ready结构体对外传递数据，是多种数据的打包。
 func newReady(r *raft, prevSoftSt *SoftState, prevHardSt pb.HardState) Ready {
 	rd := Ready{
 		Entries:          r.raftLog.unstableEntries(),

@@ -29,6 +29,7 @@ var (
 	watchBatchMaxRevs = 1000
 )
 
+// event集合
 type eventBatch struct {
 	// evs is a batch of revision-ordered events
 	evs []mvccpb.Event
@@ -73,6 +74,7 @@ func (eb *eventBatch) add(ev mvccpb.Event) {
 	eb.evs = append(eb.evs, ev)
 }
 
+// map watcher -> eventBatch
 type watcherBatch map[*watcher]*eventBatch
 
 /***
@@ -179,12 +181,16 @@ func (w watcherSetByKey) delete(wa *watcher) bool {
 watcherSet（key为watcher，value为空结构）
 adt.IntervalTree 红黑树
 */
+// 一个watcher的集合
 type watcherGroup struct {
 	// keyWatchers has the watchers that watch on a single key
+	// 单独key的watcher
 	keyWatchers watcherSetByKey
 	// ranges has the watchers that watch a range; it is sorted by interval
+	// 范围key的watcher
 	ranges adt.IntervalTree
 	// watchers is the set of all watchers
+	// 存储了所有的watcher
 	watchers watcherSet
 }
 

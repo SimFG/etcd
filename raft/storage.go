@@ -43,6 +43,7 @@ var ErrSnapshotTemporarilyUnavailable = errors.New("snapshot is temporarily unav
 // If any Storage method returns an error, the raft instance will
 // become inoperable and refuse to participate in elections; the
 // application is responsible for cleanup and recovery in this case.
+// 日志持久化接口
 type Storage interface {
 	// TODO(tbg): split this into two interfaces, LogStorage and StateStorage.
 

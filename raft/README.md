@@ -54,7 +54,7 @@ This raft implementation also includes a few optional enhancements:
 
 ## Usage
 
-The primary object in raft is a Node. Either start a Node from scratch using raft.StartNode or start a Node from some initial state using raft.RestartNode.
+The primary object in raft is a Node. Either start a Node from scratch using `raft.StartNode` or start a Node from some initial state using `raft.RestartNode`.
 
 To start a three-node cluster
 ```go

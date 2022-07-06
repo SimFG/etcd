@@ -30,6 +30,7 @@ import (
 )
 
 var (
+	// template https://cloud.tencent.com/developer/article/1683688
 	commandUsageTemplate *template.Template
 	templFuncs           = template.FuncMap{
 		"descToLines": func(s string) []string {
@@ -144,6 +145,7 @@ func getSubCommands(cmd *cobra.Command) []*cobra.Command {
 	return subCommands
 }
 
+// help指令输出
 func UsageFunc(cmd *cobra.Command, version, APIVersion string) error {
 	subCommands := getSubCommands(cmd)
 	tabOut := getTabOutWithWriter(os.Stdout)

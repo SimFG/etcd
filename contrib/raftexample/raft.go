@@ -115,6 +115,12 @@ func newRaftNode(id int, peers []string, join bool, getSnapshot func() ([]byte, 
 	return commitC, errorC, rc.snapshotterReady
 }
 
+/***
+保存snap
+- 将snap通过snapshotter保存为文件
+- 将snap的基本状态保存到wal
+- 然后将wal中的文件操作锁重置
+*/
 func (rc *raftNode) saveSnap(snap raftpb.Snapshot) error {
 	walSnap := walpb.Snapshot{
 		Index:     snap.Metadata.Index,
@@ -133,6 +139,9 @@ func (rc *raftNode) saveSnap(snap raftpb.Snapshot) error {
 	return rc.wal.ReleaseLockTo(snap.Metadata.Index)
 }
 
+/***
+根据appliedIndex截取ents
+*/
 func (rc *raftNode) entriesToApply(ents []raftpb.Entry) (nents []raftpb.Entry) {
 	if len(ents) == 0 {
 		return ents
@@ -149,6 +158,9 @@ func (rc *raftNode) entriesToApply(ents []raftpb.Entry) (nents []raftpb.Entry) {
 
 // publishEntries writes committed log entries to commit channel and returns
 // whether all entries could be published.
+/***
+向其他raft节点发布log entries，当发布完成时，可以通过返回的chan得知
+*/
 func (rc *raftNode) publishEntries(ents []raftpb.Entry) (<-chan struct{}, bool) {
 	if len(ents) == 0 {
 		return nil, true
@@ -200,6 +212,9 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry) (<-chan struct{}, bool) 
 	return applyDoneC, true
 }
 
+/***
+获取最新的snap对象
+*/
 func (rc *raftNode) loadSnapshot() *raftpb.Snapshot {
 	if wal.Exist(rc.waldir) {
 		walSnaps, err := wal.ValidSnapshotEntries(rc.logger, rc.waldir)
@@ -216,6 +231,9 @@ func (rc *raftNode) loadSnapshot() *raftpb.Snapshot {
 }
 
 // openWAL returns a WAL ready for reading.
+/***
+通过snap获取wal对象
+*/
 func (rc *raftNode) openWAL(snapshot *raftpb.Snapshot) *wal.WAL {
 	if !wal.Exist(rc.waldir) {
 		if err := os.Mkdir(rc.waldir, 0750); err != nil {
@@ -243,6 +261,9 @@ func (rc *raftNode) openWAL(snapshot *raftpb.Snapshot) *wal.WAL {
 }
 
 // replayWAL replays WAL entries into the raft instance.
+/***
+raft节点启动时，通过文件获取wal对象
+*/
 func (rc *raftNode) replayWAL() *wal.WAL {
 	log.Printf("replaying WAL of member %d", rc.id)
 	snapshot := rc.loadSnapshot()
@@ -263,6 +284,9 @@ func (rc *raftNode) replayWAL() *wal.WAL {
 	return w
 }
 
+/***
+通知节点，服务出现错误
+*/
 func (rc *raftNode) writeError(err error) {
 	rc.stopHTTP()
 	close(rc.commitC)
@@ -271,6 +295,15 @@ func (rc *raftNode) writeError(err error) {
 	rc.node.Stop()
 }
 
+/***
+启动raft节点
+- 获取snap
+- 获取wal
+- 启动raft
+- 开始raft间通信的transport，并添加其他raft节点
+- rc.serveRaft() 开启raft节点间的通信服务端
+- rc.serveChannels() 接收客户端消息及其节点间的通信消息
+*/
 func (rc *raftNode) startRaft() {
 	if !fileutil.Exist(rc.snapdir) {
 		if err := os.Mkdir(rc.snapdir, 0750); err != nil {
@@ -327,6 +360,9 @@ func (rc *raftNode) startRaft() {
 }
 
 // stop closes http, closes all channels, and stops raft.
+/***
+停止当前节点
+*/
 func (rc *raftNode) stop() {
 	rc.stopHTTP()
 	close(rc.commitC)
@@ -334,12 +370,20 @@ func (rc *raftNode) stop() {
 	rc.node.Stop()
 }
 
+/***
+停止节点见通信的server
+*/
 func (rc *raftNode) stopHTTP() {
 	rc.transport.Stop()
 	close(rc.httpstopc)
 	<-rc.httpdonec
 }
 
+/***
+通知服务端更新snap
+- rc.commitC <- nil
+- commitC在创建raft的时候返回，并会启用协程读取其中的消息，如果为nil，会重新从文件中读取snap相关信息
+*/
 func (rc *raftNode) publishSnapshot(snapshotToSave raftpb.Snapshot) {
 	if raft.IsEmptySnap(snapshotToSave) {
 		return
@@ -360,6 +404,12 @@ func (rc *raftNode) publishSnapshot(snapshotToSave raftpb.Snapshot) {
 
 var snapshotCatchUpEntriesN uint64 = 10000
 
+/*** 生成sanp
+- 判断appliedIndex与上一个snapIndex的间隔，如果大于snapCount，则生成snap
+- 等待applyDoneC信号
+- 获取snap数据，生成snap对象，并保存
+- 进行compact
+*/
 func (rc *raftNode) maybeTriggerSnapshot(applyDoneC <-chan struct{}) {
 	if rc.appliedIndex-rc.snapshotIndex <= rc.snapCount {
 		return
@@ -399,6 +449,10 @@ func (rc *raftNode) maybeTriggerSnapshot(applyDoneC <-chan struct{}) {
 	rc.snapshotIndex = rc.appliedIndex
 }
 
+/*** 节点启动时被调用，用于监听消息，分别有
+- 客户端发送的两类消息，包括：数据请求和配置变更
+- raft集群节点间的通信消息
+*/
 func (rc *raftNode) serveChannels() {
 	snap, err := rc.raftStorage.Snapshot()
 	if err != nil {
@@ -448,6 +502,7 @@ func (rc *raftNode) serveChannels() {
 			rc.node.Tick()
 
 		// store raft entries to wal, then publish over commit channel
+		// 这个是将未commit的数据进行提交
 		case rd := <-rc.node.Ready():
 			// Must save the snapshot file and WAL snapshot entry before saving any other entries
 			// or hardstate to ensure that recovery after a snapshot restore is possible.
@@ -483,6 +538,9 @@ func (rc *raftNode) serveChannels() {
 // When there is a `raftpb.EntryConfChange` after creating the snapshot,
 // then the confState included in the snapshot is out of date. so We need
 // to update the confState before sending a snapshot to a follower.
+/***
+更新message中的配置状态
+*/
 func (rc *raftNode) processMessages(ms []raftpb.Message) []raftpb.Message {
 	for i := 0; i < len(ms); i++ {
 		if ms[i].Type == raftpb.MsgSnap {
@@ -492,6 +550,7 @@ func (rc *raftNode) processMessages(ms []raftpb.Message) []raftpb.Message {
 	return ms
 }
 
+// 这个网络连接是用于集群节点之间的通信
 func (rc *raftNode) serveRaft() {
 	url, err := url.Parse(rc.peers[rc.id-1])
 	if err != nil {
@@ -503,6 +562,7 @@ func (rc *raftNode) serveRaft() {
 		log.Fatalf("raftexample: Failed to listen rafthttp (%v)", err)
 	}
 
+	// 调用Serve后会一致等待，知道请求错误
 	err = (&http.Server{Handler: rc.transport.Handler()}).Serve(ln)
 	select {
 	case <-rc.httpstopc:
@@ -512,6 +572,9 @@ func (rc *raftNode) serveRaft() {
 	close(rc.httpdonec)
 }
 
+/***
+用于处理raft节点之间的消息
+*/
 func (rc *raftNode) Process(ctx context.Context, m raftpb.Message) error {
 	return rc.node.Step(ctx, m)
 }

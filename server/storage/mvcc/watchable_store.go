@@ -56,12 +56,12 @@ type watchableStore struct {
 	victimc chan struct{}
 
 	// contains all unsynced watchers that needs to sync with events that have happened
-	// 包含所有需要与已发生事件同步的未同步观察者
+	// 未同步的 watcher
 	unsynced watcherGroup
 
 	// contains all synced watchers that are in sync with the progress of the store.
 	// The key of the map is the key that the watcher watches on.
-	// 正在同步的watcher
+	// 已完成同步的 watcher
 	synced watcherGroup
 
 	stopc chan struct{}
@@ -97,6 +97,11 @@ func newWatchableStore(lg *zap.Logger, b backend.Backend, le lease.Lessor, cfg S
 		s.le.SetRangeDeleter(func() lease.TxnDelete { return s.Write(traceutil.TODO()) })
 	}
 	s.wg.Add(2)
+	// 这里启动的两个 goroutine 分别负责了历史事件推送和异常场景重试。
+	// 而最新消息推送并不是由后台任务推送，而是在执行 PUT 操作时，由 notify 方法同步推送。
+	// syncWatchersLoop：历史事件推送
+	// syncVictimsLoop：异常场景重试
+	// notify：最新事件推送
 	go s.syncWatchersLoop()
 	go s.syncVictimsLoop()
 	return s
@@ -121,6 +126,7 @@ func (s *watchableStore) NewWatchStream() WatchStream {
 	}
 }
 
+// 创建一个watcher，同时将watcher放进synced或unsynced集合中
 /*** 创建一个watcher
 - 创建watcher
 - 如果开始版本大于当前版本，则将watcher添加到synced列表中，

@@ -19,6 +19,8 @@ import (
 	"strconv"
 )
 
+// 节点选举过程的逻辑
+
 // Index is a Raft log position.
 type Index uint64
 

@@ -70,8 +70,8 @@ func NewTransport(info TLSInfo, dialtimeoutd time.Duration) (*http.Transport, er
 }
 
 func (urt *unixTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	url := *req.URL
-	req.URL = &url
+	//url := *req.URL
+	//req.URL = &url
 	req.URL.Scheme = strings.Replace(req.URL.Scheme, "unix", "http", 1)
 	return urt.Transport.RoundTrip(req)
 }

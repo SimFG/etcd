@@ -53,6 +53,7 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVarP(&globalFlags.OutputFormat, "write-out", "w", "simple", "set the output format (fields, json, protobuf, simple, table)")
 	rootCmd.PersistentFlags().BoolVar(&globalFlags.IsHex, "hex", false, "print byte strings as hex encoded strings")
+	// 动态flag补全
 	rootCmd.RegisterFlagCompletionFunc("write-out", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return []string{"fields", "json", "protobuf", "simple", "table"}, cobra.ShellCompDirectiveDefault
 	})
@@ -105,6 +106,8 @@ func usageFunc(c *cobra.Command) error {
 	return cobrautl.UsageFunc(c, version.Version, version.APIVersion)
 }
 
+// SetUsageFunc/SetHelpTemplate
+// 提供自己的usage函数或模板，定义help如何打印
 func Start() error {
 	rootCmd.SetUsageFunc(usageFunc)
 	// Make help just show the usage

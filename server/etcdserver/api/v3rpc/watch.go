@@ -141,6 +141,7 @@ type serverWatchStream struct {
 	// record watch IDs that need return previous key-value pair
 	prevKV map[mvcc.WatchID]bool
 	// records fragmented watch IDs
+	// 传输数据量大于阈值，需要拆分发送
 	fragment map[mvcc.WatchID]bool
 
 	// closec indicates the stream is closed.
@@ -177,6 +178,7 @@ func (ws *watchServer) Watch(stream pb.Watch_WatchServer) (err error) {
 
 	sws.wg.Add(1)
 	go func() {
+		// 将从 MVCC 模块接收的 Watch 事件转发给 client
 		sws.sendLoop()
 		sws.wg.Done()
 	}()
@@ -187,6 +189,7 @@ func (ws *watchServer) Watch(stream pb.Watch_WatchServer) (err error) {
 	// may continue to block since it uses a different context, leading to
 	// deadlock when calling sws.close().
 	go func() {
+		// 接收 client的 create/cancel watcher 请求
 		if rerr := sws.recvLoop(); rerr != nil {
 			if isClientCtxErr(stream.Context().Err(), rerr) {
 				sws.lg.Debug("failed to receive watch request from gRPC stream", zap.Error(rerr))
@@ -355,8 +358,10 @@ func (sws *serverWatchStream) recvLoop() error {
 
 func (sws *serverWatchStream) sendLoop() {
 	// watch ids that are currently active
+	// 存储已经完成watcher创建的id
 	ids := make(map[mvcc.WatchID]struct{})
 	// watch responses pending on a watch id creation message
+	// 如果先收到mvcc模块的的watcher结果，还没有完成Watcher创建，这个时候结果会临时保存在pending中
 	pending := make(map[mvcc.WatchID][]*pb.WatchResponse)
 
 	interval := GetProgressReportInterval()
@@ -377,6 +382,7 @@ func (sws *serverWatchStream) sendLoop() {
 
 	for {
 		select {
+		// 这个 watchStream.Chan() 是 MVCC 模块中的，当 WatchableKV 有更新时会通知 WatchStream，然后 sendLoop 取出消息并发送给 client
 		case wresp, ok := <-sws.watchStream.Chan():
 			if !ok {
 				return
@@ -412,8 +418,8 @@ func (sws *serverWatchStream) sendLoop() {
 
 			if _, okID := ids[wresp.WatchID]; !okID {
 				// buffer if id not yet announced
-				wrs := append(pending[wresp.WatchID], wr)
-				pending[wresp.WatchID] = wrs
+				// TODO simfg pr
+				pending[wresp.WatchID] = append(pending[wresp.WatchID], wr)
 				continue
 			}
 
@@ -446,7 +452,9 @@ func (sws *serverWatchStream) sendLoop() {
 				sws.progress[wresp.WatchID] = false
 			}
 			sws.mu.Unlock()
-
+		// 包括了 watcher 的 create 和 cancel
+		// 这个控制逻辑消息由 recvLoop 产生，recvLoop 收到用户发送的 create 或者 cancel 请求后先调用 watchStream 的方法 create 或者 cancel watcher，
+		// 然后在通过 chan 异步传递到 sendLoop 中，以维护 sendLoop 中的活跃watcherID 列表
 		case c, ok := <-sws.ctrlStream:
 			if !ok {
 				return

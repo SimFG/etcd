@@ -55,6 +55,9 @@ func newKVStore(snapshotter *snap.Snapshotter, proposeC chan<- string, commitC <
 	return s
 }
 
+/***
+查询key对应的值
+*/
 func (s *kvstore) Lookup(key string) (string, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -62,6 +65,9 @@ func (s *kvstore) Lookup(key string) (string, bool) {
 	return v, ok
 }
 
+/**
+发送存储kv的请求，通过proposeC发送到raftNode中
+*/
 func (s *kvstore) Propose(k string, v string) {
 	var buf bytes.Buffer
 	if err := gob.NewEncoder(&buf).Encode(kv{k, v}); err != nil {
@@ -70,6 +76,9 @@ func (s *kvstore) Propose(k string, v string) {
 	s.proposeC <- buf.String()
 }
 
+/***
+读取commitC中的数据，并存储到kvStore的map中，完成后会关闭commit中的applyDoneC通道
+*/
 func (s *kvstore) readCommits(commitC <-chan *commit, errorC <-chan error) {
 	for commit := range commitC {
 		if commit == nil {
@@ -104,12 +113,16 @@ func (s *kvstore) readCommits(commitC <-chan *commit, errorC <-chan error) {
 	}
 }
 
+/***
+获取kv所有数据的字节数组
+*/
 func (s *kvstore) getSnapshot() ([]byte, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return json.Marshal(s.kvStore)
 }
 
+// 加载最新的snap
 func (s *kvstore) loadSnapshot() (*raftpb.Snapshot, error) {
 	snapshot, err := s.snapshotter.Load()
 	if err == snap.ErrNoSnapshot {
@@ -121,6 +134,9 @@ func (s *kvstore) loadSnapshot() (*raftpb.Snapshot, error) {
 	return snapshot, nil
 }
 
+/***
+读取snap中的值
+*/
 func (s *kvstore) recoverFromSnapshot(snapshot []byte) error {
 	var store map[string]string
 	if err := json.Unmarshal(snapshot, &store); err != nil {
